@@ -1,5 +1,4 @@
--- Track board registration after student has paid exam registration fee
--- (JAMB, WAEC/SSCE, NECO, etc.)
+-- Required for Exam Register "Mark board registered" button
 -- Run once in Supabase SQL Editor
 
 alter table public.student_fees

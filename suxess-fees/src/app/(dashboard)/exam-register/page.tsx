@@ -31,6 +31,7 @@ export default async function ExamRegisterPage({
   const lockedCampus = campusFilter(profile);
   const admin = isAdmin(profile);
 
+  // Prefer full select; fall back if board_registered columns not migrated yet
   let query = supabase
     .from("student_fees")
     .select(
@@ -50,7 +51,30 @@ export default async function ExamRegisterPage({
     query = query.eq("students.campus_id", lockedCampus);
   }
 
-  const { data: fees } = await query;
+  let { data: fees, error } = await query;
+
+  if (error) {
+    // Column missing or other error — retry without board columns
+    let q2 = supabase
+      .from("student_fees")
+      .select(
+        `id, amount, amount_paid, balance, status, session, term,
+         fee_types(id, name),
+         students!inner(
+           id, full_name, admission_number, class_name,
+           parent_name, parent_phone, campus_id, status,
+           campuses(short_name, name)
+         )`
+      )
+      .eq("students.status", "active")
+      .order("created_at", { ascending: false });
+    if (lockedCampus) {
+      q2 = q2.eq("students.campus_id", lockedCampus);
+    }
+    const res2 = await q2;
+    fees = res2.data;
+    error = res2.error;
+  }
 
   // Only exam registration fee types (JAMB, WAEC, etc.)
   let list = (fees || []).filter((f: any) => {
@@ -68,7 +92,6 @@ export default async function ExamRegisterPage({
   }
 
   if (params.status === "pending") {
-    // Paid (or partial) but not yet board-registered
     list = list.filter(
       (f: any) => Number(f.amount_paid) > 0 && !f.board_registered
     );
@@ -128,6 +151,14 @@ export default async function ExamRegisterPage({
         </p>
       </div>
 
+      {error && (
+        <div className="mb-4 bg-red-50 border border-red-200 text-red-800 text-sm rounded-lg p-3">
+          Could not load fees: {error.message}. If this mentions{" "}
+          <code>board_registered</code>, run{" "}
+          <code>migration-exam-registration.sql</code> in Supabase.
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <div className="bg-red-50 border border-red-200 rounded-xl p-4">
           <p className="text-sm text-red-700">Exam fee not paid</p>
@@ -152,7 +183,7 @@ export default async function ExamRegisterPage({
               : "bg-white text-gray-700 border-gray-200"
           }`}
         >
-          All
+          All ({allExam.length})
         </Link>
         <Link
           href="/exam-register?status=unpaid"
@@ -291,34 +322,17 @@ export default async function ExamRegisterPage({
                     colSpan={admin ? 7 : 6}
                     className="px-6 py-12 text-center text-gray-400"
                   >
-                    No exam registration fees found. Create fee types named e.g.{" "}
+                    No exam registration fees found. Use fee types named{" "}
                     <strong>JAMB Registration</strong>,{" "}
-                    <strong>WAEC Registration</strong>, then record the fee /
-                    payment for the student.
+                    <strong>WAEC Registration</strong>, or{" "}
+                    <strong>NECO Registration</strong> when recording payment.
+                    {error ? ` (Load error: ${error.message})` : ""}
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
-      </div>
-
-      <div className="text-sm text-gray-500 bg-gray-50 border rounded-xl p-4">
-        <p className="font-medium text-gray-700 mb-2">How to use</p>
-        <ol className="list-decimal pl-5 space-y-1">
-          <li>
-            In fee types, use names like <strong>JAMB Registration</strong>,{" "}
-            <strong>WAEC Registration</strong>, <strong>SSCE Form</strong>,{" "}
-            <strong>NECO</strong> (so the app recognises them).
-          </li>
-          <li>
-            Record the exam fee for the student (and payment when they pay).
-          </li>
-          <li>
-            They appear here. After you register them on the JAMB/WAEC portal,
-            click <strong>Mark board registered</strong>.
-          </li>
-        </ol>
       </div>
     </div>
   );

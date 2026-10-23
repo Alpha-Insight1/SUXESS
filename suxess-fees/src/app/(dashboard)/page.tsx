@@ -12,6 +12,7 @@ import {
   CalendarDays,
   CalendarRange,
   Banknote,
+  Package,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -127,6 +128,22 @@ export default async function DashboardPage() {
     .eq("expense_date", today);
   if (campusId) expensesTodayQuery = expensesTodayQuery.eq("campus_id", campusId);
 
+  let inventorySalesMonthQuery = supabase
+    .from("inventory_sales")
+    .select("profit, total_price, total_cost, sale_date, campus_id")
+    .gte("sale_date", monthStart)
+    .lte("sale_date", monthEnd);
+  if (campusId)
+    inventorySalesMonthQuery = inventorySalesMonthQuery.eq("campus_id", campusId);
+
+  let inventorySalesTodayQuery = supabase
+    .from("inventory_sales")
+    .select("profit, total_price, total_cost, campus_id")
+    .eq("sale_date", today);
+  if (campusId)
+    inventorySalesTodayQuery = inventorySalesTodayQuery.eq("campus_id", campusId);
+
+
   const [
     { count: totalStudents },
     { data: outstanding },
@@ -139,6 +156,8 @@ export default async function DashboardPage() {
     { data: trendExpenses },
     { data: todayPayments },
     { data: todayExpenses },
+    invMonthRes,
+    invTodayRes,
   ] = await Promise.all([
     studentsQuery,
     outstandingQuery,
@@ -151,7 +170,29 @@ export default async function DashboardPage() {
     expensesTrendQuery,
     paymentsTodayQuery,
     expensesTodayQuery,
+    inventorySalesMonthQuery,
+    inventorySalesTodayQuery,
   ]);
+
+  const monthInvSales = invMonthRes?.data || [];
+  const todayInvSales = invTodayRes?.data || [];
+  // If table missing, treat as zero profit
+  const inventoryProfitMonth = monthInvSales.reduce(
+    (s: number, r: any) => s + Number(r.profit || 0),
+    0
+  );
+  const inventoryRevenueMonth = monthInvSales.reduce(
+    (s: number, r: any) => s + Number(r.total_price || 0),
+    0
+  );
+  const inventoryProfitToday = todayInvSales.reduce(
+    (s: number, r: any) => s + Number(r.profit || 0),
+    0
+  );
+  const inventoryRevenueToday = todayInvSales.reduce(
+    (s: number, r: any) => s + Number(r.total_price || 0),
+    0
+  );
 
   const totalOutstanding =
     outstanding?.reduce((sum, f) => sum + Number(f.balance || 0), 0) || 0;
@@ -169,8 +210,12 @@ export default async function DashboardPage() {
   const expensesToday =
     todayExpenses?.reduce((sum, e) => sum + Number(e.amount || 0), 0) || 0;
   // Daily operating result: fees in − expenses out (payroll is monthly)
-  const profitToday = incomeToday - expensesToday;
-  const profitMonth = totalIncomeMonth - totalExpensesMonth - totalPayroll;
+  // Fees profit + inventory product profit
+  const profitToday =
+    incomeToday - expensesToday + inventoryProfitToday;
+  const profitMonth =
+    totalIncomeMonth - totalExpensesMonth - totalPayroll + inventoryProfitMonth;
+
 
   // --- Branch financials (current month) ---
   type BranchRow = {
@@ -436,7 +481,7 @@ export default async function DashboardPage() {
             {formatCurrency(expensesToday)}
           </p>
           <p className="text-xs text-gray-400 mt-1">
-            Daily figure excludes monthly staff salaries
+            Fees − expenses + inventory profit (excludes monthly salaries)
           </p>
         </div>
 
@@ -469,8 +514,51 @@ export default async function DashboardPage() {
             {formatCurrency(totalPayroll)}
           </p>
           <p className="text-xs text-gray-400 mt-1">
-            Full monthly result including staff salaries
+            Full monthly result including staff salaries + inventory profit
           </p>
+        </div>
+      </div>
+
+      {/* Inventory profit */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8">
+        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+          <div className="flex items-center gap-2 text-sm text-gray-600 mb-1">
+            <Package className="w-4 h-4" />
+            Inventory profit today
+          </div>
+          <p
+            className={`text-2xl font-bold ${
+              inventoryProfitToday >= 0 ? "text-green-700" : "text-red-700"
+            }`}
+          >
+            {formatCurrency(inventoryProfitToday)}
+          </p>
+          <p className="text-sm text-gray-500 mt-2">
+            Sales revenue {formatCurrency(inventoryRevenueToday)}
+          </p>
+        </div>
+        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+          <div className="flex items-center gap-2 text-sm text-gray-600 mb-1">
+            <Package className="w-4 h-4" />
+            Inventory profit this month ({monthLabel})
+          </div>
+          <p
+            className={`text-2xl font-bold ${
+              inventoryProfitMonth >= 0 ? "text-green-700" : "text-red-700"
+            }`}
+          >
+            {formatCurrency(inventoryProfitMonth)}
+          </p>
+          <p className="text-sm text-gray-500 mt-2">
+            Sales revenue {formatCurrency(inventoryRevenueMonth)} ·{" "}
+            {monthInvSales.length} sale{monthInvSales.length === 1 ? "" : "s"}
+          </p>
+          <Link
+            href="/inventory"
+            className="text-sm text-brand-green font-medium mt-2 inline-block hover:underline"
+          >
+            View inventory →
+          </Link>
         </div>
       </div>
 
