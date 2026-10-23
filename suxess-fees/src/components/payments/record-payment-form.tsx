@@ -76,6 +76,23 @@ function isStudentTutorial(campuses: StudentOption["campuses"]): boolean {
   return s.includes("arepo") || s.includes("ofada") || s.includes("mowe");
 }
 
+/** JAMB/WAEC/NECO etc. — tracked on Exam Register, not Card Renewals */
+function isExamRegistrationFeeName(name?: string | null): boolean {
+  if (!name) return false;
+  const n = name.toLowerCase();
+  return (
+    n.includes("jamb") ||
+    n.includes("waec") ||
+    n.includes("ssce") ||
+    n.includes("neco") ||
+    n.includes("gce") ||
+    n.includes("nabteb") ||
+    (n.includes("exam") &&
+      (n.includes("regist") || n.includes("form") || n.includes("pin")))
+  );
+}
+
+
 function PaymentBreakdown({
   feeAmount,
   amountPaidSoFar,
@@ -329,10 +346,19 @@ export function RecordPaymentForm({
       return;
     }
 
-    // Tutorial centres (Arepo / Ofada):
-    // Full payment → card valid 1 month; half/partial → valid 2 weeks
+    // Tutorial tuition only (not JAMB/WAEC/NECO exam fees):
+    // Full payment → 1 month card; partial → 2 weeks. Exam fees go to Exam Register.
     const fullCampus = campusSearchText(selectedStudent?.campuses);
-    if (isTutorialCampusName(fullCampus) && feeId) {
+    const feeNameForCard =
+      feeTypeName ||
+      selectedFeeTypeName ||
+      feeTypes.find((f) => f.id === feeTypeId)?.name ||
+      "";
+    if (
+      isTutorialCampusName(fullCampus) &&
+      feeId &&
+      !isExamRegistrationFeeName(feeNameForCard)
+    ) {
       const payDate =
         (payment as any).payment_date ||
         new Date().toISOString().slice(0, 10);

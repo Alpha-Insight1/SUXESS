@@ -48,7 +48,20 @@ export default async function RenewalsPage() {
   }
 
   const { data: rows } = await query;
-  const list = rows || [];
+  const list = (rows || []).filter((r: any) => {
+    const ft = Array.isArray(r.fee_types) ? r.fee_types[0] : r.fee_types;
+    const n = String(ft?.name || "").toLowerCase();
+    const isExam =
+      n.includes("jamb") ||
+      n.includes("waec") ||
+      n.includes("ssce") ||
+      n.includes("neco") ||
+      n.includes("gce") ||
+      n.includes("nabteb") ||
+      (n.includes("exam") &&
+        (n.includes("regist") || n.includes("form") || n.includes("pin")));
+    return !isExam; // exam fees belong on Exam Register, not Card Renewals
+  });
 
   const expired = list.filter(
     (r: any) => r.valid_until && r.valid_until < today
