@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { formatCurrency, addOneMonth, isTutorialCampusName } from "@/lib/utils";
+import { formatCurrency, addOneMonth, addDaysToDate, isTutorialCampusName } from "@/lib/utils";
 import { EmailReceiptButton } from "@/components/receipts/email-receipt-button";
 import { SmsReceiptButton } from "@/components/receipts/sms-receipt-button";
 
@@ -181,6 +181,21 @@ export function RecordPaymentForm({
 
   const selectedStudent = students.find((s) => s.id === studentId);
   const isTutorialStudent = isStudentTutorial(selectedStudent?.campuses);
+
+  const displayFeeTypes = (() => {
+    const examHints = ["jamb", "waec", "neco", "ssce", "gce", "nabteb", "exam"];
+    const isExam = (n: string) =>
+      examHints.some((h) => n.toLowerCase().includes(h));
+    const list = [...feeTypes];
+    if (!isTutorialStudent) return list;
+    return list.sort((a, b) => {
+      const ae = isExam(a.name) ? 0 : 1;
+      const be = isExam(b.name) ? 0 : 1;
+      if (ae !== be) return ae - be;
+      return a.name.localeCompare(b.name);
+    });
+  })();
+
   const selectedFee = outstandingFees.find((f) => f.id === studentFeeId);
   const selectedFeeTypeName =
     feeTypes.find((ft) => ft.id === feeTypeId)?.name ||
@@ -314,13 +329,18 @@ export function RecordPaymentForm({
       return;
     }
 
-    // Tutorial centres (Arepo / Ofada): card valid for 1 month from payment date
+    // Tutorial centres (Arepo / Ofada):
+    // Full payment → card valid 1 month; half/partial → valid 2 weeks
     const fullCampus = campusSearchText(selectedStudent?.campuses);
-    if (isTutorialCampusName(fullCampus)) {
+    if (isTutorialCampusName(fullCampus) && feeId) {
       const payDate =
         (payment as any).payment_date ||
         new Date().toISOString().slice(0, 10);
-      const until = addOneMonth(String(payDate).slice(0, 10));
+      const totalAfter = previousPaid + paid;
+      const fullyPaid = feeTotal > 0 && totalAfter >= feeTotal;
+      const until = fullyPaid
+        ? addOneMonth(String(payDate).slice(0, 10))
+        : addDaysToDate(String(payDate).slice(0, 10), 14);
       await supabase
         .from("student_fees")
         .update({ valid_until: until, updated_at: new Date().toISOString() })
@@ -570,7 +590,7 @@ export function RecordPaymentForm({
                   className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-green"
                 >
                   <option value="">Select fee type</option>
-                  {feeTypes.map((ft) => (
+                  {displayFeeTypes.map((ft) => (
                     <option key={ft.id} value={ft.id}>
                       {ft.name}
                     </option>

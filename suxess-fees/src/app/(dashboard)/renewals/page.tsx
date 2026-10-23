@@ -106,9 +106,7 @@ export default async function RenewalsPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Card renewals</h1>
         <p className="text-gray-500 mt-1">
-          Tutorial centres (Arepo / Ofada): after payment, the card is valid for
-          one month (e.g. paid 22 Oct → renew 22 Nov). This table shows who is
-          expiring.
+          Tutorial centres: full payment → card valid 1 month; half/partial payment → valid 2 weeks. This table shows who is expiring.
           {!admin && profile?.campuses?.short_name
             ? ` · ${profile.campuses.short_name}`
             : ""}
@@ -183,6 +181,12 @@ export default async function RenewalsPage() {
                           >
                             {r.valid_until}
                           </span>
+                          {Number(r.amount_paid || 0) > 0 &&
+                            Number(r.amount_paid || 0) < Number(r.amount || 0) && (
+                              <span className="block text-xs text-amber-700 mt-0.5">
+                                Partial pay (2-week card)
+                              </span>
+                            )}
                         </td>
                         <td className="px-4 py-3">{st?.parent_phone || "—"}</td>
                         <td className="px-4 py-3">

@@ -39,3 +39,15 @@ export function isTutorialCampusName(name?: string | null): boolean {
   const s = name.toLowerCase();
   return s.includes("arepo") || s.includes("ofada") || s.includes("mowe");
 }
+
+
+/** Add N calendar days to an ISO date (YYYY-MM-DD). */
+export function addDaysToDate(isoDate: string, days: number): string {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + days);
+  const yy = dt.getFullYear();
+  const mm = String(dt.getMonth() + 1).padStart(2, "0");
+  const dd = String(dt.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}

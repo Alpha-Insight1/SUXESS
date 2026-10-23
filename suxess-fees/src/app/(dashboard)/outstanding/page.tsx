@@ -50,7 +50,28 @@ export default async function OutstandingPage({
     campusesQuery,
   ]);
 
-  const filtered = fees || [];
+  // Outstanding is Main school only — never Arepo / Ofada tutorial fees
+  function isMainCampusRow(f: any) {
+    const st = Array.isArray(f.students) ? f.students[0] : f.students;
+    const c = Array.isArray(st?.campuses) ? st?.campuses[0] : st?.campuses;
+    const label = `${c?.short_name || ""} ${c?.name || ""}`.toLowerCase();
+    if (label.includes("arepo") || label.includes("ofada") || label.includes("mowe")) {
+      return false;
+    }
+    return true;
+  }
+
+  const filtered = (fees || []).filter(isMainCampusRow);
+
+  // Campus filter chips: only Main (non-tutorial)
+  const mainCampuses = (campuses || []).filter((c: any) => {
+    const label = `${c.short_name || ""} ${c.name || ""}`.toLowerCase();
+    return !(
+      label.includes("arepo") ||
+      label.includes("ofada") ||
+      label.includes("mowe")
+    );
+  });
   const totalOutstanding = filtered.reduce(
     (sum: number, f: any) => sum + Number(f.balance || 0),
     0
@@ -63,14 +84,14 @@ export default async function OutstandingPage({
           <h1 className="text-2xl font-bold text-gray-900">Outstanding Balances</h1>
           <p className="text-gray-500 mt-1">
             {admin
-              ? "Full fee records across campuses"
+              ? "Main campus school fees only (not tutorial centres)"
               : `Outstanding at ${profile?.campuses?.short_name || "your campus"}`}
           </p>
         </div>
         <ExportOutstanding fees={filtered as any[]} />
       </div>
 
-      {admin && (
+      {admin && mainCampuses.length > 0 && (
         <div className="flex flex-wrap gap-3 mb-6">
           <Link
             href="/outstanding"
