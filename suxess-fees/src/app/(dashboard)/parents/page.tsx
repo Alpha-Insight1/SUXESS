@@ -14,7 +14,7 @@ export default async function ParentsPage() {
   let studentsQuery = supabase
     .from("students")
     .select(
-      "id, full_name, parent_name, parent_phone, parent_email, campus_id, status, campuses(short_name, name)"
+      "id, full_name, parent_name, parent_phone, campus_id, status, campuses(short_name, name)"
     )
     .eq("status", "active")
     .order("parent_name");
@@ -37,33 +37,25 @@ export default async function ParentsPage() {
   const map = new Map<string, ParentRow>();
   for (const s of students || []) {
     const phone = String(s.parent_phone || "").trim();
-    const email = String(s.parent_email || "").trim();
-    if (!phone && !email) continue;
+    if (!phone) continue;
 
     const camp = Array.isArray(s.campuses) ? s.campuses[0] : s.campuses;
     const campusLabel = camp?.short_name || camp?.name || "—";
-    const key =
-      (phone.replace(/\D/g, "") || email.toLowerCase()) +
-      "|" +
-      (s.campus_id || "");
+    const key = phone.replace(/\D/g, "") + "|" + (s.campus_id || "");
 
     const existing = map.get(key);
     if (existing) {
       if (!existing.students.includes(s.full_name)) {
         existing.students = `${existing.students}, ${s.full_name}`;
       }
-      if (!existing.email && email) existing.email = email;
-      if (!existing.phone && phone) existing.phone = phone;
     } else {
-      const row: ParentRow = {
-        phone: phone || "",
-        email: email || "",
+      map.set(key, {
+        phone,
         parent_name: s.parent_name || "—",
         students: s.full_name,
         campus: campusLabel,
         campus_id: s.campus_id || "",
-      };
-      map.set(key, row);
+      });
     }
   }
 
@@ -74,12 +66,10 @@ export default async function ParentsPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">
-          Parents · SMS & Email
-        </h1>
+        <h1 className="text-2xl font-bold text-gray-900">Parents · SMS</h1>
         <p className="text-gray-500 mt-1">
           {admin
-            ? "Parent contacts from all branches — send bulk SMS or email"
+            ? "Parent phone numbers — send bulk SMS"
             : `Parent contacts at ${
                 profile?.campuses?.short_name || "your campus"
               }`}

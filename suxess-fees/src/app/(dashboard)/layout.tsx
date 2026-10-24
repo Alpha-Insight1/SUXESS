@@ -9,7 +9,9 @@ function campusKind(profile: Awaited<ReturnType<typeof getCurrentProfile>>) {
     label.includes("arepo") ||
     label.includes("ofada") ||
     label.includes("mowe");
-  const isMain = label.includes("main") || (!isTutorial && !!profile?.campus_id);
+  const isMain =
+    label.includes("main") ||
+    (!isTutorial && profile?.role === "secretary" && !!profile?.campus_id);
   return { isTutorial, isMain, label };
 }
 
@@ -26,7 +28,7 @@ export default async function DashboardLayout({
     ? "Admin"
     : profile?.role === "secretary"
       ? "Secretary"
-      : undefined;
+      : "Staff";
   const campusLabel =
     profile?.campuses?.short_name || profile?.campuses?.name || undefined;
 

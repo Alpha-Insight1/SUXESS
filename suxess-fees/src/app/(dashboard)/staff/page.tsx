@@ -31,16 +31,41 @@ export default async function StaffPage({
     .order("full_name");
   if (activeCampus) query = query.eq("campus_id", activeCampus);
 
-  const [{ data: campuses }, { data: staff }] = await Promise.all([
+  let loansQuery = supabase
+    .from("staff_loans")
+    .select("staff_id, monthly_deduction, amount_remaining, reason, status")
+    .eq("status", "active");
+  if (activeCampus) loansQuery = loansQuery.eq("campus_id", activeCampus);
+
+  const [{ data: campuses }, { data: staff }, loansRes] = await Promise.all([
     campusesQuery,
     query,
+    loansQuery,
   ]);
 
+  const loans = loansRes.data || [];
+  const deductionByStaff = new Map<
+    string,
+    { total: number; reasons: string[] }
+  >();
+  for (const l of loans) {
+    const id = l.staff_id as string;
+    const cur = deductionByStaff.get(id) || { total: 0, reasons: [] };
+    cur.total += Number(l.monthly_deduction || 0);
+    const r = String(l.reason || "Loan");
+    if (!cur.reasons.includes(r)) cur.reasons.push(r);
+    deductionByStaff.set(id, cur);
+  }
+
   const activeStaff = staff?.filter((s: any) => s.status === "active") || [];
-  const totalPayroll = activeStaff.reduce(
+  const totalGross = activeStaff.reduce(
     (sum: number, s: any) => sum + Number(s.salary || 0),
     0
   );
+  const totalDeductions = activeStaff.reduce((sum: number, s: any) => {
+    return sum + (deductionByStaff.get(s.id)?.total || 0);
+  }, 0);
+  const totalNet = totalGross - totalDeductions;
 
   return (
     <div>
@@ -49,11 +74,17 @@ export default async function StaffPage({
           <h1 className="text-2xl font-bold text-gray-900">Staff & Salaries</h1>
           <p className="text-gray-500 mt-1">
             {admin
-              ? "Manage staff and monthly salaries per campus"
+              ? "Gross salary, loan deductions and net pay per campus"
               : `Staff at ${profile?.campuses?.short_name || "your campus"}`}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Link
+            href="/loans"
+            className="inline-flex items-center px-4 py-2.5 rounded-lg text-sm font-medium border border-gray-300 bg-white text-gray-800 hover:bg-gray-50"
+          >
+            Teacher loans
+          </Link>
           <ExportStaff staff={staff || []} />
           <StaffForm
             campuses={campuses || []}
@@ -90,16 +121,27 @@ export default async function StaffPage({
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
           <p className="text-sm text-gray-500">Active staff</p>
           <p className="text-2xl font-bold text-gray-900">{activeStaff.length}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-          <p className="text-sm text-gray-500">Monthly payroll (active)</p>
+          <p className="text-sm text-gray-500">Gross payroll</p>
           <p className="text-2xl font-bold text-gray-900">
-            {formatCurrency(totalPayroll)}
+            {formatCurrency(totalGross)}
           </p>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+          <p className="text-sm text-gray-500">Net after loans</p>
+          <p className="text-2xl font-bold text-green-800">
+            {formatCurrency(totalNet)}
+          </p>
+          {totalDeductions > 0 && (
+            <p className="text-xs text-red-600 mt-1">
+              Deductions −{formatCurrency(totalDeductions)}
+            </p>
+          )}
         </div>
       </div>
 
@@ -111,49 +153,75 @@ export default async function StaffPage({
                 <th className="text-left px-4 py-3 font-medium">Name</th>
                 <th className="text-left px-4 py-3 font-medium">Campus</th>
                 <th className="text-left px-4 py-3 font-medium">Role</th>
-                <th className="text-left px-4 py-3 font-medium">Phone</th>
-                <th className="text-left px-4 py-3 font-medium">Salary</th>
+                <th className="text-left px-4 py-3 font-medium">Gross salary</th>
+                <th className="text-left px-4 py-3 font-medium">Deduction</th>
+                <th className="text-left px-4 py-3 font-medium">Net pay</th>
                 <th className="text-left px-4 py-3 font-medium">Status</th>
                 <th className="text-left px-4 py-3 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {staff && staff.length > 0 ? (
-                staff.map((s: any) => (
-                  <tr key={s.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium">{s.full_name}</td>
-                    <td className="px-4 py-3">
-                      {s.campuses?.short_name || s.campuses?.name || "—"}
-                    </td>
-                    <td className="px-4 py-3">{s.role || "—"}</td>
-                    <td className="px-4 py-3">{s.phone || "—"}</td>
-                    <td className="px-4 py-3 font-semibold">
-                      {formatCurrency(Number(s.salary || 0))}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-                          s.status === "active"
-                            ? "bg-green-100 text-green-700"
-                            : "bg-gray-100 text-gray-600"
-                        }`}
-                      >
-                        {s.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <StaffActions
-                        staffId={s.id}
-                        status={s.status || "active"}
-                        currentSalary={Number(s.salary || 0)}
-                      />
-                    </td>
-                  </tr>
-                ))
+                staff.map((s: any) => {
+                  const gross = Number(s.salary || 0);
+                  const ded = deductionByStaff.get(s.id);
+                  const deduct = ded?.total || 0;
+                  const net = Math.max(0, gross - deduct);
+                  const camp = Array.isArray(s.campuses)
+                    ? s.campuses[0]
+                    : s.campuses;
+                  return (
+                    <tr key={s.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 font-medium">{s.full_name}</td>
+                      <td className="px-4 py-3">
+                        {camp?.short_name || camp?.name || "—"}
+                      </td>
+                      <td className="px-4 py-3">{s.role || "—"}</td>
+                      <td className="px-4 py-3">
+                        {formatCurrency(gross)}
+                      </td>
+                      <td className="px-4 py-3">
+                        {deduct > 0 ? (
+                          <div>
+                            <span className="font-semibold text-red-700">
+                              −{formatCurrency(deduct)}
+                            </span>
+                            <span className="block text-xs text-gray-500 mt-0.5">
+                              {ded?.reasons.join(", ") || "Loan"}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 font-semibold text-green-800">
+                        {formatCurrency(net)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                            s.status === "active"
+                              ? "bg-green-100 text-green-700"
+                              : "bg-gray-100 text-gray-600"
+                          }`}
+                        >
+                          {s.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <StaffActions
+                          staffId={s.id}
+                          status={s.status || "active"}
+                          currentSalary={gross}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })
               ) : (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="px-6 py-12 text-center text-gray-400"
                   >
                     No staff added yet

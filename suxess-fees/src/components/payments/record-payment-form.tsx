@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency, addOneMonth, addDaysToDate, isTutorialCampusName } from "@/lib/utils";
-import { EmailReceiptButton } from "@/components/receipts/email-receipt-button";
 import { SmsReceiptButton } from "@/components/receipts/sms-receipt-button";
 
 type StudentOption = {
@@ -469,19 +468,7 @@ export function RecordPaymentForm({
               </strong>
             </p>
 
-            <EmailReceiptButton
-              parentEmail={summary.parent_email}
-              studentName={summary.student_name}
-              parentName={summary.parent_name}
-              receiptNumber={summary.receipt_number}
-              amountPaid={summary.amount_paid}
-              feeType={summary.fee_type}
-              feeAmount={summary.fee_amount}
-              outstandingBalance={summary.outstanding_balance}
-              session={summary.session}
-              term={summary.term}
-              paymentMethod={summary.payment_method}
-            />
+            
 
             <SmsReceiptButton
               parentPhone={summary.parent_phone}

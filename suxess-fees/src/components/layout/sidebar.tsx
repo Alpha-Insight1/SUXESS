@@ -16,6 +16,7 @@ import {
   Contact,
   BookOpen,
   ClipboardCheck,
+  Banknote,
   LogOut,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -25,10 +26,16 @@ type NavItem = {
   href: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
-  /** who can see: all | admin | main | tutorial */
+  /** all | admin | main | tutorial */
   show?: "all" | "admin" | "main" | "tutorial";
 };
 
+/**
+ * Secretaries (Main): Dashboard, Payment, Outstanding, Students, Receipts, Expenses
+ * Secretaries (Arepo/Ofada): Dashboard, Payment, Students, Receipts, Card Renewals,
+ *   Exam Register, Expenses, Teacher Daily Pay
+ * Admin: everything
+ */
 const navItems: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, show: "all" },
   { href: "/payments", label: "Record Payment", icon: CreditCard, show: "all" },
@@ -37,11 +44,12 @@ const navItems: NavItem[] = [
   { href: "/receipts", label: "Receipts", icon: Receipt, show: "all" },
   { href: "/renewals", label: "Card Renewals", icon: CalendarClock, show: "tutorial" },
   { href: "/exam-register", label: "Exam Register", icon: ClipboardCheck, show: "tutorial" },
-  { href: "/parents", label: "Parents · SMS & Email", icon: Contact, show: "all" },
-  { href: "/inventory", label: "Inventory", icon: Package, show: "main" },
   { href: "/expenses", label: "Expenses", icon: Wallet, show: "all" },
   { href: "/teacher-pay", label: "Teacher Daily Pay", icon: BookOpen, show: "tutorial" },
-  { href: "/staff", label: "Staff & Salaries", icon: UserCog, show: "all" },
+  { href: "/inventory", label: "Inventory", icon: Package, show: "main" },
+  { href: "/parents", label: "Parents · SMS", icon: Contact, show: "admin" },
+  { href: "/loans", label: "Teacher Loans", icon: Banknote, show: "admin" },
+  { href: "/staff", label: "Staff & Salaries", icon: UserCog, show: "admin" },
 ];
 
 export function Sidebar({
@@ -70,11 +78,11 @@ export function Sidebar({
   const visible = navItems.filter((item) => {
     const show = item.show || "all";
     if (show === "all") return true;
-    if (isAdminUser) return true; // admin sees everything
+    if (isAdminUser) return true;
+    if (show === "admin") return false;
     if (show === "main") return !!isMainCampus;
     if (show === "tutorial") return !!isTutorialCampus;
-    if (show === "admin") return !!isAdminUser;
-    return true;
+    return false;
   });
 
   return (
