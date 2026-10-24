@@ -51,7 +51,9 @@ export default async function ExamRegisterPage({
     query = query.eq("students.campus_id", lockedCampus);
   }
 
-  let { data: fees, error } = await query;
+  const first = await query;
+  let fees: any[] | null = first.data as any[] | null;
+  let error = first.error;
 
   if (error) {
     // Column missing or other error — retry without board columns
@@ -72,7 +74,7 @@ export default async function ExamRegisterPage({
       q2 = q2.eq("students.campus_id", lockedCampus);
     }
     const res2 = await q2;
-    fees = res2.data;
+    fees = (res2.data as any[] | null) || null;
     error = res2.error;
   }
 
