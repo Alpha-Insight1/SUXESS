@@ -5,14 +5,15 @@ import {
   Users,
   CreditCard,
   AlertCircle,
+  Wallet,
+  CalendarClock,
+  ClipboardCheck,
   TrendingUp,
   TrendingDown,
-  Wallet,
-  GraduationCap,
   CalendarDays,
   CalendarRange,
-  Banknote,
   Package,
+  Banknote,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -26,11 +27,31 @@ function addDays(d: Date, n: number) {
   return x;
 }
 
+function campusLabelOf(profile: Awaited<ReturnType<typeof getCurrentProfile>>) {
+  return `${profile?.campuses?.short_name || ""} ${
+    profile?.campuses?.name || ""
+  }`.toLowerCase();
+}
+
 export default async function DashboardPage() {
   const supabase = await createClient();
   const profile = await getCurrentProfile();
   const campusId = campusFilter(profile);
   const admin = isAdmin(profile);
+  const label = campusLabelOf(profile);
+  const isTutorial =
+    label.includes("arepo") ||
+    label.includes("ofada") ||
+    label.includes("mowe");
+  const isMainSec =
+    !admin &&
+    (label.includes("main") || (!isTutorial && !!profile?.campus_id));
+
+  const scopeLabel = admin
+    ? "All campuses"
+    : profile?.campuses?.short_name ||
+      profile?.campuses?.name ||
+      "Your campus";
 
   const now = new Date();
   const today = isoDate(now);
@@ -40,11 +61,10 @@ export default async function DashboardPage() {
     month: "long",
     year: "numeric",
   });
-  // Last 14 days for daily table
   const days14Start = isoDate(addDays(now, -13));
-  // Last 6 calendar months for monthly trend
   const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
   const sixMonthsStart = isoDate(sixMonthsAgo);
+  const in7 = isoDate(addDays(now, 7));
 
   let studentsQuery = supabase
     .from("students")
@@ -54,20 +74,41 @@ export default async function DashboardPage() {
 
   let outstandingQuery = supabase
     .from("student_fees")
-    .select("balance, students!inner(campus_id)")
+    .select("balance, students!inner(campus_id, campuses(short_name, name))")
     .gt("balance", 0);
   if (campusId) {
     outstandingQuery = outstandingQuery.eq("students.campus_id", campusId);
   }
 
+  let paymentsTodayQuery = supabase
+    .from("payments")
+    .select("amount, students!inner(campus_id)")
+    .is("deleted_at", null)
+    .eq("payment_date", today);
+  if (campusId)
+    paymentsTodayQuery = paymentsTodayQuery.eq("students.campus_id", campusId);
+
+  let expensesTodayQuery = supabase
+    .from("expenses")
+    .select("amount")
+    .eq("expense_date", today);
+  if (campusId) expensesTodayQuery = expensesTodayQuery.eq("campus_id", campusId);
+
+  let studentRowsQuery = supabase
+    .from("students")
+    .select(
+      "id, class_name, exam_preparing_for, campus_id, campuses(short_name, name)"
+    )
+    .eq("status", "active");
+  if (campusId) studentRowsQuery = studentRowsQuery.eq("campus_id", campusId);
+
+  // Admin-only heavier queries
   let campusesQuery = supabase
     .from("campuses")
     .select("id, name, short_name")
     .eq("is_active", true)
     .order("name");
-  if (campusId) campusesQuery = campusesQuery.eq("id", campusId);
 
-  // Month payments/expenses (current month cards + branch compare)
   let paymentsMonthQuery = supabase
     .from("payments")
     .select("amount, payment_date, students!inner(campus_id)")
@@ -82,101 +123,149 @@ export default async function DashboardPage() {
     .select("amount, campus_id, expense_date")
     .gte("expense_date", monthStart)
     .lte("expense_date", monthEnd);
-  if (campusId) expensesMonthQuery = expensesMonthQuery.eq("campus_id", campusId);
+  if (campusId)
+    expensesMonthQuery = expensesMonthQuery.eq("campus_id", campusId);
 
   let staffQuery = supabase
     .from("staff")
     .select("salary, campus_id, status")
     .eq("status", "active");
-  if (campusId) staffQuery = staffQuery.eq("campus_id", campusId);
 
-  let studentRowsQuery = supabase
-    .from("students")
-    .select("id, class_name, exam_preparing_for, campus_id, campuses(short_name, name)")
-    .eq("status", "active");
-  if (campusId) studentRowsQuery = studentRowsQuery.eq("campus_id", campusId);
-
-  // Broader window for daily + multi-month trends
   let paymentsTrendQuery = supabase
     .from("payments")
     .select("amount, payment_date, students!inner(campus_id)")
     .is("deleted_at", null)
-    .gte("payment_date", sixMonthsStart)
-    .lte("payment_date", today);
+    .gte("payment_date", sixMonthsStart);
   if (campusId)
     paymentsTrendQuery = paymentsTrendQuery.eq("students.campus_id", campusId);
 
   let expensesTrendQuery = supabase
     .from("expenses")
-    .select("amount, campus_id, expense_date")
-    .gte("expense_date", sixMonthsStart)
-    .lte("expense_date", today);
-  if (campusId) expensesTrendQuery = expensesTrendQuery.eq("campus_id", campusId);
-
-  // Today's payments only (fast path)
-  let paymentsTodayQuery = supabase
-    .from("payments")
-    .select("amount, students!inner(campus_id)")
-    .is("deleted_at", null)
-    .eq("payment_date", today);
+    .select("amount, expense_date")
+    .gte("expense_date", days14Start);
   if (campusId)
-    paymentsTodayQuery = paymentsTodayQuery.eq("students.campus_id", campusId);
-
-  let expensesTodayQuery = supabase
-    .from("expenses")
-    .select("amount, campus_id")
-    .eq("expense_date", today);
-  if (campusId) expensesTodayQuery = expensesTodayQuery.eq("campus_id", campusId);
+    expensesTrendQuery = expensesTrendQuery.eq("campus_id", campusId);
 
   let inventorySalesMonthQuery = supabase
     .from("inventory_sales")
-    .select("profit, total_price, total_cost, sale_date, campus_id")
+    .select("profit, total_price, sale_date, campus_id")
     .gte("sale_date", monthStart)
     .lte("sale_date", monthEnd);
-  if (campusId)
-    inventorySalesMonthQuery = inventorySalesMonthQuery.eq("campus_id", campusId);
 
   let inventorySalesTodayQuery = supabase
     .from("inventory_sales")
-    .select("profit, total_price, total_cost, campus_id")
+    .select("profit, total_price")
     .eq("sale_date", today);
-  if (campusId)
-    inventorySalesTodayQuery = inventorySalesTodayQuery.eq("campus_id", campusId);
 
+  // Renewals (tutorial secretaries + admin)
+  let renewalsQuery = supabase
+    .from("student_fees")
+    .select(
+      "id, valid_until, amount, amount_paid, students!inner(full_name, campus_id, status)"
+    )
+    .not("valid_until", "is", null)
+    .eq("students.status", "active")
+    .lte("valid_until", in7)
+    .order("valid_until")
+    .limit(8);
+  if (campusId)
+    renewalsQuery = renewalsQuery.eq("students.campus_id", campusId);
+
+  // Exam fees summary for all
+  let examFeesQuery = supabase
+    .from("student_fees")
+    .select(
+      "id, amount_paid, board_registered, fee_types(name), students!inner(campus_id, status)"
+    )
+    .eq("students.status", "active");
+  if (campusId)
+    examFeesQuery = examFeesQuery.eq("students.campus_id", campusId);
 
   const [
     { count: totalStudents },
-    { data: outstanding },
+    { data: outstandingRaw },
+    { data: todayPayments },
+    { data: todayExpenses },
+    { data: studentRows },
     { data: campuses },
     { data: monthPayments },
     { data: monthExpenses },
     { data: activeStaff },
-    { data: studentRows },
     { data: trendPayments },
     { data: trendExpenses },
-    { data: todayPayments },
-    { data: todayExpenses },
     invMonthRes,
     invTodayRes,
+    { data: renewals },
+    { data: examFeesRaw },
   ] = await Promise.all([
     studentsQuery,
     outstandingQuery,
+    paymentsTodayQuery,
+    expensesTodayQuery,
+    studentRowsQuery,
     campusesQuery,
     paymentsMonthQuery,
     expensesMonthQuery,
     staffQuery,
-    studentRowsQuery,
     paymentsTrendQuery,
     expensesTrendQuery,
-    paymentsTodayQuery,
-    expensesTodayQuery,
     inventorySalesMonthQuery,
     inventorySalesTodayQuery,
+    renewalsQuery,
+    examFeesQuery,
   ]);
+
+  // Outstanding: Main school only (filter out tutorial campuses)
+  const outstanding = (outstandingRaw || []).filter((f: any) => {
+    const st = Array.isArray(f.students) ? f.students[0] : f.students;
+    const c = Array.isArray(st?.campuses) ? st?.campuses[0] : st?.campuses;
+    const L = `${c?.short_name || ""} ${c?.name || ""}`.toLowerCase();
+    return !(
+      L.includes("arepo") ||
+      L.includes("ofada") ||
+      L.includes("mowe")
+    );
+  });
+
+  function isExamName(name?: string | null) {
+    if (!name) return false;
+    const n = name.toLowerCase();
+    return (
+      n.includes("jamb") ||
+      n.includes("waec") ||
+      n.includes("ssce") ||
+      n.includes("neco") ||
+      n.includes("gce") ||
+      n.includes("nabteb") ||
+      (n.includes("exam") &&
+        (n.includes("regist") || n.includes("form") || n.includes("pin")))
+    );
+  }
+
+  const examFees = (examFeesRaw || []).filter((f: any) => {
+    const ft = Array.isArray(f.fee_types) ? f.fee_types[0] : f.fee_types;
+    return isExamName(ft?.name);
+  });
+  const examPendingBoard = examFees.filter(
+    (f: any) => Number(f.amount_paid) > 0 && !f.board_registered
+  ).length;
+  const examUnpaid = examFees.filter(
+    (f: any) => Number(f.amount_paid) <= 0
+  ).length;
+
+  const totalOutstanding = outstanding.reduce(
+    (sum: number, f: any) => sum + Number(f.balance || 0),
+    0
+  );
+  const debtorsCount = outstanding.length;
+
+  const incomeToday =
+    todayPayments?.reduce((sum, p) => sum + Number(p.amount || 0), 0) || 0;
+  const expensesTodayAmt =
+    todayExpenses?.reduce((sum, e) => sum + Number(e.amount || 0), 0) || 0;
 
   const monthInvSales = invMonthRes?.data || [];
   const todayInvSales = invTodayRes?.data || [];
-  // If table missing, treat as zero profit
   const inventoryProfitMonth = monthInvSales.reduce(
     (s: number, r: any) => s + Number(r.profit || 0),
     0
@@ -194,10 +283,6 @@ export default async function DashboardPage() {
     0
   );
 
-  const totalOutstanding =
-    outstanding?.reduce((sum, f) => sum + Number(f.balance || 0), 0) || 0;
-  const debtorsCount = outstanding?.length || 0;
-
   const totalIncomeMonth =
     monthPayments?.reduce((sum, p) => sum + Number(p.amount || 0), 0) || 0;
   const totalExpensesMonth =
@@ -205,19 +290,34 @@ export default async function DashboardPage() {
   const totalPayroll =
     activeStaff?.reduce((sum, s) => sum + Number(s.salary || 0), 0) || 0;
 
-  const incomeToday =
-    todayPayments?.reduce((sum, p) => sum + Number(p.amount || 0), 0) || 0;
-  const expensesToday =
-    todayExpenses?.reduce((sum, e) => sum + Number(e.amount || 0), 0) || 0;
-  // Daily operating result: fees in − expenses out (payroll is monthly)
-  // Fees profit + inventory product profit
-  const profitToday =
-    incomeToday - expensesToday + inventoryProfitToday;
+  const profitToday = incomeToday - expensesTodayAmt + inventoryProfitToday;
   const profitMonth =
     totalIncomeMonth - totalExpensesMonth - totalPayroll + inventoryProfitMonth;
 
+  // Class / exam breakdown for this campus (secretaries) or admin detail
+  const classMap = new Map<string, number>();
+  const examMap = new Map<string, number>();
+  for (const s of studentRows || []) {
+    const camp = Array.isArray(s.campuses) ? s.campuses[0] : s.campuses;
+    const cl = `${camp?.short_name || ""} ${camp?.name || ""}`.toLowerCase();
+    const tut =
+      cl.includes("arepo") || cl.includes("ofada") || cl.includes("mowe");
+    if (tut || isTutorial) {
+      const ex = String(s.exam_preparing_for || "Not set").trim() || "Not set";
+      examMap.set(ex, (examMap.get(ex) || 0) + 1);
+    } else {
+      const cn = String(s.class_name || "Unassigned").trim() || "Unassigned";
+      classMap.set(cn, (classMap.get(cn) || 0) + 1);
+    }
+  }
+  const classRows = Array.from(classMap.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count);
+  const examRows = Array.from(examMap.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count);
 
-  // --- Branch financials (current month) ---
+  // Admin branch compare
   type BranchRow = {
     id: string;
     name: string;
@@ -240,97 +340,45 @@ export default async function DashboardPage() {
     });
   }
   for (const p of monthPayments || []) {
-    const cid = (p.students as any)?.campus_id as string | undefined;
-    if (!cid || !branchMap.has(cid)) continue;
-    branchMap.get(cid)!.income += Number(p.amount || 0);
+    const cid = (p.students as any)?.campus_id;
+    if (cid && branchMap.has(cid)) {
+      branchMap.get(cid)!.income += Number(p.amount || 0);
+    }
   }
   for (const e of monthExpenses || []) {
-    if (!branchMap.has(e.campus_id)) continue;
-    branchMap.get(e.campus_id)!.expenses += Number(e.amount || 0);
+    const cid = e.campus_id as string;
+    if (cid && branchMap.has(cid)) {
+      branchMap.get(cid)!.expenses += Number(e.amount || 0);
+    }
   }
   for (const s of activeStaff || []) {
-    if (!branchMap.has(s.campus_id)) continue;
-    branchMap.get(s.campus_id)!.payroll += Number(s.salary || 0);
+    const cid = s.campus_id as string;
+    if (cid && branchMap.has(cid)) {
+      branchMap.get(cid)!.payroll += Number(s.salary || 0);
+    }
   }
   const branches = Array.from(branchMap.values()).map((b) => ({
     ...b,
     profit: b.income - b.expenses - b.payroll,
   }));
 
-  // --- Students by campus & class ---
-  type CampusStudentCount = {
-    id: string;
-    name: string;
-    short_name: string;
-    count: number;
-  };
-  const campusStudentMap = new Map<string, CampusStudentCount>();
-  for (const c of campuses || []) {
-    campusStudentMap.set(c.id, {
+  const campusStudentTotals = (campuses || []).map((c) => {
+    const count = (studentRows || []).filter(
+      (s: any) => s.campus_id === c.id
+    ).length;
+    return {
       id: c.id,
       name: c.name,
       short_name: c.short_name || c.name,
-      count: 0,
-    });
-  }
-  const classCountMap = new Map<string, number>();
-  const examCountMap = new Map<string, number>();
-  for (const s of studentRows || []) {
-    const cid = s.campus_id as string | null;
-    const camp = Array.isArray(s.campuses) ? s.campuses[0] : s.campuses;
-    const campLabel = `${(camp as any)?.short_name || ""} ${(camp as any)?.name || ""}`.toLowerCase();
-    const isTutorial =
-      campLabel.includes("arepo") ||
-      campLabel.includes("ofada") ||
-      campLabel.includes("mowe");
-
-    if (cid && campusStudentMap.has(cid)) {
-      campusStudentMap.get(cid)!.count += 1;
-    } else if (cid && !campusStudentMap.has(cid)) {
-      campusStudentMap.set(cid, {
-        id: cid,
-        name: (camp as any)?.name || "Unknown",
-        short_name: (camp as any)?.short_name || (camp as any)?.name || "—",
-        count: 1,
-      });
-    }
-
-    if (isTutorial) {
-      const exam =
-        ((s as any).exam_preparing_for as string | null)?.trim() || "Not set";
-      examCountMap.set(exam, (examCountMap.get(exam) || 0) + 1);
-    } else {
-      const cls = (s.class_name || "Unassigned").trim() || "Unassigned";
-      classCountMap.set(cls, (classCountMap.get(cls) || 0) + 1);
-    }
-  }
-  const campusStudentTotals = Array.from(campusStudentMap.values()).sort(
-    (a, b) => b.count - a.count
+      count,
+    };
+  });
+  const grandStudentTotal = campusStudentTotals.reduce(
+    (s, c) => s + c.count,
+    0
   );
-  const classCounts = Array.from(classCountMap.entries())
-    .map(([class_name, count]) => ({ class_name, count }))
-    .sort((a, b) =>
-      a.class_name.localeCompare(b.class_name, undefined, {
-        numeric: true,
-        sensitivity: "base",
-      })
-    );
-  const examCounts = Array.from(examCountMap.entries())
-    .map(([exam, count]) => ({ exam, count }))
-    .sort((a, b) => a.exam.localeCompare(b.exam));
-  const grandStudentTotal = campusStudentTotals.reduce((s, c) => s + c.count, 0);
 
-  // Scope: main school shows classes; tutorial centres show exams
-  const profileCampusLabel = `${profile?.campuses?.short_name || ""} ${profile?.campuses?.name || ""}`.toLowerCase();
-  const userIsTutorial =
-    !admin &&
-    (profileCampusLabel.includes("arepo") ||
-      profileCampusLabel.includes("ofada") ||
-      profileCampusLabel.includes("mowe"));
-  const showExamBreakdown = userIsTutorial || (admin && examCounts.length > 0);
-  const showClassBreakdown = !userIsTutorial;
-
-  // --- Daily profit last 14 days (income − expenses) ---
+  // Daily 14 days for admin
   const dailyMap = new Map<
     string,
     { date: string; income: number; expenses: number; profit: number }
@@ -340,615 +388,446 @@ export default async function DashboardPage() {
     dailyMap.set(d, { date: d, income: 0, expenses: 0, profit: 0 });
   }
   for (const p of trendPayments || []) {
-    const d = p.payment_date as string;
-    if (!dailyMap.has(d)) continue;
-    dailyMap.get(d)!.income += Number(p.amount || 0);
+    const d = String(p.payment_date || "").slice(0, 10);
+    if (dailyMap.has(d)) {
+      dailyMap.get(d)!.income += Number(p.amount || 0);
+    }
   }
   for (const e of trendExpenses || []) {
-    const d = e.expense_date as string;
-    if (!dailyMap.has(d)) continue;
-    dailyMap.get(d)!.expenses += Number(e.amount || 0);
+    const d = String(e.expense_date || "").slice(0, 10);
+    if (dailyMap.has(d)) {
+      dailyMap.get(d)!.expenses += Number(e.amount || 0);
+    }
   }
   const dailyRows = Array.from(dailyMap.values()).map((r) => ({
     ...r,
     profit: r.income - r.expenses,
   }));
 
-  // --- Monthly profit last 6 months ---
-  // Income − expenses per month; payroll counted only in current month fully
-  // (historical months: income − expenses only, since we don't have month-end payroll snapshots)
-  const monthlyMap = new Map<
-    string,
-    { key: string; label: string; income: number; expenses: number; payroll: number; profit: number }
-  >();
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    const label = d.toLocaleString("en-NG", { month: "short", year: "numeric" });
-    monthlyMap.set(key, {
-      key,
-      label,
-      income: 0,
-      expenses: 0,
-      payroll: key === monthStart.slice(0, 7) ? totalPayroll : 0,
-      profit: 0,
-    });
-  }
-  for (const p of trendPayments || []) {
-    const key = String(p.payment_date).slice(0, 7);
-    if (!monthlyMap.has(key)) continue;
-    monthlyMap.get(key)!.income += Number(p.amount || 0);
-  }
-  for (const e of trendExpenses || []) {
-    const key = String(e.expense_date).slice(0, 7);
-    if (!monthlyMap.has(key)) continue;
-    monthlyMap.get(key)!.expenses += Number(e.amount || 0);
-  }
-  const monthlyRows = Array.from(monthlyMap.values()).map((r) => ({
-    ...r,
-    profit: r.income - r.expenses - r.payroll,
-  }));
-
-  const scopeLabel = admin
-    ? "All campuses"
-    : profile?.campuses?.short_name || "Your campus";
-
-  const cards = [
-    {
-      title: "Active Students",
-      value: totalStudents ?? 0,
-      icon: Users,
-      color: "bg-blue-500",
-    },
-    {
-      title: `Income (${monthLabel})`,
-      value: formatCurrency(totalIncomeMonth),
-      icon: CreditCard,
-      color: "bg-green-600",
-    },
-    {
-      title: "Outstanding Balance",
-      value: formatCurrency(totalOutstanding),
-      icon: AlertCircle,
-      color: "bg-red-500",
-    },
-    {
-      title: "Students with Debt",
-      value: debtorsCount,
-      icon: TrendingUp,
-      color: "bg-amber-500",
-    },
-  ];
-
   return (
     <div>
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
         <p className="text-gray-500 mt-1">
-          {scopeLabel} · Collections, expenses & profit — {monthLabel}
+          {admin
+            ? `All campuses · Collections & profit — ${monthLabel}`
+            : `${scopeLabel} · Secretary view`}
         </p>
       </div>
 
-      {/* Core KPI cards */}
+      {/* Shared top cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-8">
-        {cards.map((card) => (
-          <div
-            key={card.title}
-            className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">{card.title}</p>
-                <p className="text-2xl font-bold mt-1 text-gray-900">
-                  {card.value}
-                </p>
-              </div>
-              <div className={`${card.color} p-3 rounded-lg text-white`}>
-                <card.icon className="w-5 h-5" />
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Profit today + this month — core admin view */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8">
-        <div
-          className={`rounded-xl border p-6 shadow-sm ${
-            profitToday >= 0
-              ? "bg-green-50 border-green-200"
-              : "bg-red-50 border-red-200"
-          }`}
-        >
-          <div className="flex items-center gap-2 text-sm text-gray-600 mb-1">
-            <CalendarDays className="w-4 h-4" />
-            Profit today
-          </div>
-          <p
-            className={`text-3xl font-bold flex items-center gap-2 ${
-              profitToday >= 0 ? "text-green-700" : "text-red-700"
-            }`}
-          >
-            {profitToday >= 0 ? (
-              <TrendingUp className="w-7 h-7" />
-            ) : (
-              <TrendingDown className="w-7 h-7" />
-            )}
-            {formatCurrency(profitToday)}
-          </p>
-          <p className="text-sm text-gray-500 mt-3">
-            Fees collected {formatCurrency(incomeToday)} − Expenses{" "}
-            {formatCurrency(expensesToday)}
-          </p>
-          <p className="text-xs text-gray-400 mt-1">
-            Fees − expenses + inventory profit (excludes monthly salaries)
-          </p>
-        </div>
-
-        <div
-          className={`rounded-xl border p-6 shadow-sm ${
-            profitMonth >= 0
-              ? "bg-green-50 border-green-200"
-              : "bg-red-50 border-red-200"
-          }`}
-        >
-          <div className="flex items-center gap-2 text-sm text-gray-600 mb-1">
-            <CalendarRange className="w-4 h-4" />
-            Profit this month ({monthLabel})
-          </div>
-          <p
-            className={`text-3xl font-bold flex items-center gap-2 ${
-              profitMonth >= 0 ? "text-green-700" : "text-red-700"
-            }`}
-          >
-            {profitMonth >= 0 ? (
-              <TrendingUp className="w-7 h-7" />
-            ) : (
-              <TrendingDown className="w-7 h-7" />
-            )}
-            {formatCurrency(profitMonth)}
-          </p>
-          <p className="text-sm text-gray-500 mt-3">
-            Income {formatCurrency(totalIncomeMonth)} − Expenses{" "}
-            {formatCurrency(totalExpensesMonth)} − Payroll{" "}
-            {formatCurrency(totalPayroll)}
-          </p>
-          <p className="text-xs text-gray-400 mt-1">
-            Full monthly result including staff salaries + inventory profit
-          </p>
-        </div>
-      </div>
-
-      {/* Inventory profit */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8">
-        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <div className="flex items-center gap-2 text-sm text-gray-600 mb-1">
-            <Package className="w-4 h-4" />
-            Inventory profit today
-          </div>
-          <p
-            className={`text-2xl font-bold ${
-              inventoryProfitToday >= 0 ? "text-green-700" : "text-red-700"
-            }`}
-          >
-            {formatCurrency(inventoryProfitToday)}
-          </p>
-          <p className="text-sm text-gray-500 mt-2">
-            Sales revenue {formatCurrency(inventoryRevenueToday)}
-          </p>
-        </div>
-        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <div className="flex items-center gap-2 text-sm text-gray-600 mb-1">
-            <Package className="w-4 h-4" />
-            Inventory profit this month ({monthLabel})
-          </div>
-          <p
-            className={`text-2xl font-bold ${
-              inventoryProfitMonth >= 0 ? "text-green-700" : "text-red-700"
-            }`}
-          >
-            {formatCurrency(inventoryProfitMonth)}
-          </p>
-          <p className="text-sm text-gray-500 mt-2">
-            Sales revenue {formatCurrency(inventoryRevenueMonth)} ·{" "}
-            {monthInvSales.length} sale{monthInvSales.length === 1 ? "" : "s"}
-          </p>
-          <Link
-            href="/inventory"
-            className="text-sm text-brand-green font-medium mt-2 inline-block hover:underline"
-          >
-            View inventory →
-          </Link>
-        </div>
-      </div>
-
-      {/* Daily profit table (last 14 days) */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-8">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">
-              Daily profit (last 14 days)
-            </h2>
-            <p className="text-sm text-gray-500">
-              Fees collected − Expenses each day (salaries not included)
-            </p>
-          </div>
-          <Banknote className="w-5 h-5 text-gray-400" />
-        </div>
-        <div className="overflow-x-auto max-h-96 overflow-y-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-gray-600 sticky top-0">
-              <tr>
-                <th className="text-left px-6 py-3 font-medium">Date</th>
-                <th className="text-right px-6 py-3 font-medium">Income</th>
-                <th className="text-right px-6 py-3 font-medium">Expenses</th>
-                <th className="text-right px-6 py-3 font-medium">Profit</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {[...dailyRows].reverse().map((r) => (
-                <tr
-                  key={r.date}
-                  className={`hover:bg-gray-50 ${
-                    r.date === today ? "bg-green-50/50" : ""
-                  }`}
-                >
-                  <td className="px-6 py-2.5 font-medium text-gray-900">
-                    {r.date}
-                    {r.date === today && (
-                      <span className="ml-2 text-xs text-brand-green font-semibold">
-                        Today
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-6 py-2.5 text-right text-green-700">
-                    {formatCurrency(r.income)}
-                  </td>
-                  <td className="px-6 py-2.5 text-right text-red-600">
-                    {formatCurrency(r.expenses)}
-                  </td>
-                  <td
-                    className={`px-6 py-2.5 text-right font-semibold ${
-                      r.profit >= 0 ? "text-green-700" : "text-red-700"
-                    }`}
-                  >
-                    {formatCurrency(r.profit)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Monthly profit (last 6 months) — important for admin */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-8">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">
-              Monthly profit (last 6 months)
-            </h2>
-            <p className="text-sm text-gray-500">
-              Income − Expenses
-              {admin || !campusId
-                ? " (− Payroll in current month)"
-                : " (− Payroll in current month)"}
-            </p>
-          </div>
-          <CalendarRange className="w-5 h-5 text-gray-400" />
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-gray-600">
-              <tr>
-                <th className="text-left px-6 py-3 font-medium">Month</th>
-                <th className="text-right px-6 py-3 font-medium">Income</th>
-                <th className="text-right px-6 py-3 font-medium">Expenses</th>
-                <th className="text-right px-6 py-3 font-medium">Payroll</th>
-                <th className="text-right px-6 py-3 font-medium">Profit</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {[...monthlyRows].reverse().map((r) => (
-                <tr
-                  key={r.key}
-                  className={`hover:bg-gray-50 ${
-                    r.key === monthStart.slice(0, 7) ? "bg-green-50/40" : ""
-                  }`}
-                >
-                  <td className="px-6 py-3 font-medium text-gray-900">
-                    {r.label}
-                    {r.key === monthStart.slice(0, 7) && (
-                      <span className="ml-2 text-xs text-brand-green font-semibold">
-                        Current
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-6 py-3 text-right text-green-700">
-                    {formatCurrency(r.income)}
-                  </td>
-                  <td className="px-6 py-3 text-right text-red-600">
-                    {formatCurrency(r.expenses)}
-                  </td>
-                  <td className="px-6 py-3 text-right text-gray-700">
-                    {r.payroll > 0 ? formatCurrency(r.payroll) : "—"}
-                  </td>
-                  <td
-                    className={`px-6 py-3 text-right font-bold ${
-                      r.profit >= 0 ? "text-green-700" : "text-red-700"
-                    }`}
-                  >
-                    {formatCurrency(r.profit)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="px-6 py-3 bg-gray-50 text-xs text-gray-500 border-t">
-          Past months show Income − Expenses only. Current month also subtracts
-          active staff salaries.
-        </div>
-      </div>
-
-      {/* Students by branch + by class */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+          <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">
-                Students by branch
-              </h2>
               <p className="text-sm text-gray-500">
-                Active students · Total {grandStudentTotal}
+                {admin ? "Active students" : "Students (this campus)"}
+              </p>
+              <p className="text-2xl font-bold mt-1 text-gray-900">
+                {totalStudents ?? 0}
               </p>
             </div>
-            <Users className="w-5 h-5 text-gray-400" />
+            <div className="bg-blue-500 p-3 rounded-lg text-white">
+              <Users className="w-5 h-5" />
+            </div>
           </div>
-          <div className="divide-y divide-gray-100">
-            {campusStudentTotals.length > 0 ? (
-              campusStudentTotals.map((c) => (
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500">Collected today</p>
+              <p className="text-2xl font-bold mt-1 text-gray-900">
+                {formatCurrency(incomeToday)}
+              </p>
+            </div>
+            <div className="bg-green-600 p-3 rounded-lg text-white">
+              <CreditCard className="w-5 h-5" />
+            </div>
+          </div>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500">Expenses today</p>
+              <p className="text-2xl font-bold mt-1 text-gray-900">
+                {formatCurrency(expensesTodayAmt)}
+              </p>
+            </div>
+            <div className="bg-amber-500 p-3 rounded-lg text-white">
+              <Wallet className="w-5 h-5" />
+            </div>
+          </div>
+        </div>
+        {(admin || isMainSec) && (
+          <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">Outstanding (Main)</p>
+                <p className="text-2xl font-bold mt-1 text-red-700">
+                  {formatCurrency(totalOutstanding)}
+                </p>
+                <p className="text-xs text-gray-400 mt-1">
+                  {debtorsCount} fee line{debtorsCount === 1 ? "" : "s"}
+                </p>
+              </div>
+              <div className="bg-red-500 p-3 rounded-lg text-white">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+            </div>
+            <Link
+              href="/outstanding"
+              className="text-sm text-brand-green font-medium mt-2 inline-block hover:underline"
+            >
+              View outstanding →
+            </Link>
+          </div>
+        )}
+        {!admin && isTutorial && (
+          <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-500">Cards due (7 days)</p>
+                <p className="text-2xl font-bold mt-1 text-amber-800">
+                  {(renewals || []).length}
+                </p>
+              </div>
+              <div className="bg-amber-600 p-3 rounded-lg text-white">
+                <CalendarClock className="w-5 h-5" />
+              </div>
+            </div>
+            <Link
+              href="/renewals"
+              className="text-sm text-brand-green font-medium mt-2 inline-block hover:underline"
+            >
+              Card renewals →
+            </Link>
+          </div>
+        )}
+      </div>
+
+      {/* Exam section — all campuses */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-8">
+        <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+          <div className="flex items-center gap-2">
+            <ClipboardCheck className="w-5 h-5 text-brand-green" />
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">
+                Exam registration
+              </h2>
+              <p className="text-sm text-gray-500">
+                JAMB / WAEC / NECO fees · {scopeLabel}
+              </p>
+            </div>
+          </div>
+          <Link
+            href="/exam-register"
+            className="text-sm font-medium text-brand-green hover:underline"
+          >
+            Open Exam Register →
+          </Link>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="bg-blue-50 border border-blue-100 rounded-lg p-4">
+            <p className="text-sm text-blue-800">Exam fee records</p>
+            <p className="text-2xl font-bold text-blue-900">{examFees.length}</p>
+          </div>
+          <div className="bg-amber-50 border border-amber-100 rounded-lg p-4">
+            <p className="text-sm text-amber-800">Paid · pending board</p>
+            <p className="text-2xl font-bold text-amber-900">
+              {examPendingBoard}
+            </p>
+          </div>
+          <div className="bg-red-50 border border-red-100 rounded-lg p-4">
+            <p className="text-sm text-red-700">Not paid yet</p>
+            <p className="text-2xl font-bold text-red-800">{examUnpaid}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Tutorial: card renewals list */}
+      {!admin && isTutorial && (renewals || []).length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-8">
+          <div className="px-6 py-4 border-b flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold">Card renewals (soon)</h2>
+              <p className="text-sm text-gray-500">Expired or within 7 days</p>
+            </div>
+            <Link
+              href="/renewals"
+              className="text-sm text-brand-green font-medium hover:underline"
+            >
+              View all →
+            </Link>
+          </div>
+          <div className="divide-y">
+            {(renewals || []).map((r: any) => {
+              const st = Array.isArray(r.students)
+                ? r.students[0]
+                : r.students;
+              return (
                 <div
-                  key={c.id}
-                  className="px-6 py-3 flex items-center justify-between"
+                  key={r.id}
+                  className="px-6 py-3 flex justify-between text-sm"
                 >
-                  <div>
-                    <p className="font-medium text-gray-900">{c.short_name}</p>
-                    <p className="text-xs text-gray-400">{c.name}</p>
-                  </div>
-                  <p className="text-xl font-bold text-brand-green">{c.count}</p>
+                  <span className="font-medium">{st?.full_name}</span>
+                  <span className="text-amber-700 font-medium">
+                    {r.valid_until}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Secretary: students by class or exam for THIS campus only */}
+      {!admin && (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-8">
+          <div className="px-6 py-4 border-b">
+            <h2 className="text-lg font-semibold text-gray-900">
+              {isTutorial ? "Students by exam" : "Students by class"}
+            </h2>
+            <p className="text-sm text-gray-500">{scopeLabel} only</p>
+          </div>
+          <div className="divide-y max-h-80 overflow-y-auto">
+            {(isTutorial ? examRows : classRows).length > 0 ? (
+              (isTutorial ? examRows : classRows).map((r) => (
+                <div
+                  key={r.name}
+                  className="px-6 py-3 flex justify-between text-sm"
+                >
+                  <span>{r.name}</span>
+                  <span className="font-bold text-brand-green">{r.count}</span>
                 </div>
               ))
             ) : (
               <p className="px-6 py-8 text-center text-gray-400 text-sm">
-                No active students yet
+                No students yet
               </p>
             )}
           </div>
         </div>
+      )}
 
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">
-                {userIsTutorial
-                  ? "Students by exam"
-                  : admin
-                    ? "Main: by class · Tutorial: by exam"
-                    : "Students by class"}
-              </h2>
-              <p className="text-sm text-gray-500">
-                {userIsTutorial
-                  ? "Arepo / Ofada — exam preparing for"
-                  : admin
-                    ? "School classes (Main) and exam groups (Arepo/Ofada)"
-                    : `${scopeLabel} · school classes`}
+      {/* ========== ADMIN ONLY ========== */}
+      {admin && (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8">
+            <div
+              className={`rounded-xl border p-6 shadow-sm ${
+                profitToday >= 0
+                  ? "bg-green-50 border-green-200"
+                  : "bg-red-50 border-red-200"
+              }`}
+            >
+              <div className="flex items-center gap-2 text-sm text-gray-600 mb-1">
+                <CalendarDays className="w-4 h-4" />
+                Profit today
+              </div>
+              <p
+                className={`text-3xl font-bold flex items-center gap-2 ${
+                  profitToday >= 0 ? "text-green-700" : "text-red-700"
+                }`}
+              >
+                {profitToday >= 0 ? (
+                  <TrendingUp className="w-7 h-7" />
+                ) : (
+                  <TrendingDown className="w-7 h-7" />
+                )}
+                {formatCurrency(profitToday)}
+              </p>
+              <p className="text-sm text-gray-500 mt-3">
+                Fees {formatCurrency(incomeToday)} − Expenses{" "}
+                {formatCurrency(expensesTodayAmt)}
               </p>
             </div>
-            <GraduationCap className="w-5 h-5 text-gray-400" />
-          </div>
-          <div className="overflow-x-auto max-h-80 overflow-y-auto">
-            {showClassBreakdown && (
-              <>
-                {admin && examCounts.length > 0 && (
-                  <p className="px-6 pt-3 text-xs font-semibold text-gray-500 uppercase">
-                    Main (by class)
-                  </p>
+            <div
+              className={`rounded-xl border p-6 shadow-sm ${
+                profitMonth >= 0
+                  ? "bg-green-50 border-green-200"
+                  : "bg-red-50 border-red-200"
+              }`}
+            >
+              <div className="flex items-center gap-2 text-sm text-gray-600 mb-1">
+                <CalendarRange className="w-4 h-4" />
+                Profit this month ({monthLabel})
+              </div>
+              <p
+                className={`text-3xl font-bold flex items-center gap-2 ${
+                  profitMonth >= 0 ? "text-green-700" : "text-red-700"
+                }`}
+              >
+                {profitMonth >= 0 ? (
+                  <TrendingUp className="w-7 h-7" />
+                ) : (
+                  <TrendingDown className="w-7 h-7" />
                 )}
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 text-gray-600 sticky top-0">
-                    <tr>
-                      <th className="text-left px-6 py-3 font-medium">Class</th>
-                      <th className="text-right px-6 py-3 font-medium">
-                        Students
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {classCounts.length > 0 ? (
-                      classCounts.map((row) => (
-                        <tr key={row.class_name} className="hover:bg-gray-50">
-                          <td className="px-6 py-2.5 font-medium text-gray-900">
-                            {row.class_name}
-                          </td>
-                          <td className="px-6 py-2.5 text-right font-semibold text-gray-800">
-                            {row.count}
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td
-                          colSpan={2}
-                          className="px-6 py-6 text-center text-gray-400"
-                        >
-                          No class data
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </>
-            )}
-            {showExamBreakdown && (
-              <>
-                {admin && (
-                  <p className="px-6 pt-3 text-xs font-semibold text-gray-500 uppercase border-t">
-                    Arepo / Ofada (by exam)
-                  </p>
-                )}
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 text-gray-600">
-                    <tr>
-                      <th className="text-left px-6 py-3 font-medium">
-                        Exam preparing for
-                      </th>
-                      <th className="text-right px-6 py-3 font-medium">
-                        Students
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {examCounts.length > 0 ? (
-                      examCounts.map((row) => (
-                        <tr key={row.exam} className="hover:bg-gray-50">
-                          <td className="px-6 py-2.5 font-medium text-gray-900">
-                            {row.exam}
-                          </td>
-                          <td className="px-6 py-2.5 text-right font-semibold text-gray-800">
-                            {row.count}
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td
-                          colSpan={2}
-                          className="px-6 py-6 text-center text-gray-400"
-                        >
-                          No exam data yet
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </>
-            )}
+                {formatCurrency(profitMonth)}
+              </p>
+              <p className="text-sm text-gray-500 mt-3">
+                Income {formatCurrency(totalIncomeMonth)} − Expenses{" "}
+                {formatCurrency(totalExpensesMonth)} − Payroll{" "}
+                {formatCurrency(totalPayroll)}
+              </p>
+            </div>
           </div>
-        </div>
-      </div>
 
-      {/* Branch comparison */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-8">
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">
-              {admin ? "Branch comparison" : "Campus performance"} —{" "}
-              {monthLabel}
-            </h2>
-            <p className="text-sm text-gray-500">
-              Income (fees) − Expenses − Staff salaries
-            </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8">
+            <div className="rounded-xl border bg-white p-6 shadow-sm">
+              <div className="flex items-center gap-2 text-sm text-gray-600 mb-1">
+                <Package className="w-4 h-4" />
+                Inventory profit today
+              </div>
+              <p className="text-2xl font-bold text-green-700">
+                {formatCurrency(inventoryProfitToday)}
+              </p>
+              <p className="text-sm text-gray-500 mt-2">
+                Revenue {formatCurrency(inventoryRevenueToday)}
+              </p>
+            </div>
+            <div className="rounded-xl border bg-white p-6 shadow-sm">
+              <div className="flex items-center gap-2 text-sm text-gray-600 mb-1">
+                <Package className="w-4 h-4" />
+                Inventory profit this month
+              </div>
+              <p className="text-2xl font-bold text-green-700">
+                {formatCurrency(inventoryProfitMonth)}
+              </p>
+              <p className="text-sm text-gray-500 mt-2">
+                Revenue {formatCurrency(inventoryRevenueMonth)}
+              </p>
+            </div>
           </div>
-          <Wallet className="w-5 h-5 text-gray-400" />
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-gray-600">
-              <tr>
-                <th className="text-left px-6 py-3 font-medium">Campus</th>
-                <th className="text-left px-6 py-3 font-medium">Income</th>
-                <th className="text-left px-6 py-3 font-medium">Expenses</th>
-                <th className="text-left px-6 py-3 font-medium">Payroll</th>
-                <th className="text-left px-6 py-3 font-medium">
-                  Profit / Loss
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {branches.length > 0 ? (
-                branches.map((b) => (
-                  <tr key={b.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4">
-                      <div className="font-medium text-gray-900">
-                        {b.short_name}
-                      </div>
-                      <div className="text-xs text-gray-400">{b.name}</div>
-                    </td>
-                    <td className="px-6 py-4 text-green-700 font-medium">
-                      {formatCurrency(b.income)}
-                    </td>
-                    <td className="px-6 py-4 text-red-600">
-                      {formatCurrency(b.expenses)}
-                    </td>
-                    <td className="px-6 py-4 text-gray-700">
-                      {formatCurrency(b.payroll)}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`inline-flex items-center gap-1 font-bold ${
+
+          <div className="bg-white rounded-xl border shadow-sm overflow-hidden mb-8">
+            <div className="px-6 py-4 border-b">
+              <h2 className="text-lg font-semibold">Campus performance</h2>
+              <p className="text-sm text-gray-500">
+                Income − expenses − salaries · {monthLabel}
+              </p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-gray-600">
+                  <tr>
+                    <th className="text-left px-4 py-3">Campus</th>
+                    <th className="text-left px-4 py-3">Income</th>
+                    <th className="text-left px-4 py-3">Expenses</th>
+                    <th className="text-left px-4 py-3">Payroll</th>
+                    <th className="text-left px-4 py-3">Profit</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {branches.map((b) => (
+                    <tr key={b.id}>
+                      <td className="px-4 py-3 font-medium">{b.short_name}</td>
+                      <td className="px-4 py-3">
+                        {formatCurrency(b.income)}
+                      </td>
+                      <td className="px-4 py-3">
+                        {formatCurrency(b.expenses)}
+                      </td>
+                      <td className="px-4 py-3">
+                        {formatCurrency(b.payroll)}
+                      </td>
+                      <td
+                        className={`px-4 py-3 font-semibold ${
                           b.profit >= 0 ? "text-green-700" : "text-red-700"
                         }`}
                       >
-                        {b.profit >= 0 ? (
-                          <TrendingUp className="w-4 h-4" />
-                        ) : (
-                          <TrendingDown className="w-4 h-4" />
-                        )}
                         {formatCurrency(b.profit)}
-                        <span className="text-xs font-medium ml-1">
-                          {b.profit >= 0 ? "Profit" : "Loss"}
-                        </span>
-                      </span>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td
-                    colSpan={5}
-                    className="px-6 py-10 text-center text-gray-400"
-                  >
-                    No campus data yet
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        <div className="px-6 py-3 bg-gray-50 text-xs text-gray-500 border-t">
-          Payroll is monthly staff salary cost. Income and expenses are for the
-          current calendar month only.
-        </div>
-      </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Link
-          href="/expenses"
-          className="bg-white border border-gray-200 rounded-xl p-4 hover:border-brand-green transition shadow-sm"
-        >
-          <p className="font-medium text-gray-900">Record expense</p>
-          <p className="text-sm text-gray-500 mt-1">
-            Log daily costs for your campus
-          </p>
-        </Link>
-        <Link
-          href="/staff"
-          className="bg-white border border-gray-200 rounded-xl p-4 hover:border-brand-green transition shadow-sm"
-        >
-          <p className="font-medium text-gray-900">Staff & salaries</p>
-          <p className="text-sm text-gray-500 mt-1">
-            Manage staff and monthly salaries
-          </p>
-        </Link>
-        <Link
-          href="/outstanding"
-          className="bg-white border border-gray-200 rounded-xl p-4 hover:border-brand-green transition shadow-sm"
-        >
-          <p className="font-medium text-gray-900">Outstanding fees</p>
-          <p className="text-sm text-gray-500 mt-1">See who still owes</p>
-        </Link>
-      </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b">
+                <h2 className="text-lg font-semibold">Students by branch</h2>
+                <p className="text-sm text-gray-500">
+                  Total {grandStudentTotal}
+                </p>
+              </div>
+              <div className="divide-y">
+                {campusStudentTotals.map((c) => (
+                  <div
+                    key={c.id}
+                    className="px-6 py-3 flex justify-between"
+                  >
+                    <span className="font-medium">{c.short_name}</span>
+                    <span className="font-bold text-brand-green">
+                      {c.count}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b flex items-center gap-2">
+                <Banknote className="w-5 h-5 text-gray-400" />
+                <div>
+                  <h2 className="text-lg font-semibold">Staff salaries</h2>
+                  <p className="text-sm text-gray-500">
+                    Monthly payroll {formatCurrency(totalPayroll)}
+                  </p>
+                </div>
+              </div>
+              <div className="px-6 py-4">
+                <Link
+                  href="/staff"
+                  className="text-sm text-brand-green font-medium hover:underline"
+                >
+                  Manage staff & loans →
+                </Link>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border shadow-sm overflow-hidden mb-8">
+            <div className="px-6 py-4 border-b">
+              <h2 className="text-lg font-semibold">
+                Daily profit (last 14 days)
+              </h2>
+            </div>
+            <div className="overflow-x-auto max-h-72 overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 sticky top-0">
+                  <tr>
+                    <th className="text-left px-4 py-2">Date</th>
+                    <th className="text-left px-4 py-2">Income</th>
+                    <th className="text-left px-4 py-2">Expenses</th>
+                    <th className="text-left px-4 py-2">Profit</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {dailyRows.map((r) => (
+                    <tr key={r.date}>
+                      <td className="px-4 py-2">{r.date}</td>
+                      <td className="px-4 py-2">
+                        {formatCurrency(r.income)}
+                      </td>
+                      <td className="px-4 py-2">
+                        {formatCurrency(r.expenses)}
+                      </td>
+                      <td
+                        className={`px-4 py-2 font-medium ${
+                          r.profit >= 0 ? "text-green-700" : "text-red-700"
+                        }`}
+                      >
+                        {formatCurrency(r.profit)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
