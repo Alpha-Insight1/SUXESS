@@ -45,7 +45,9 @@ export default async function DashboardPage() {
     label.includes("mowe");
   const isMainSec =
     !admin &&
-    (label.includes("main") || (!isTutorial && !!profile?.campus_id));
+    !!profile?.campus_id &&
+    !isTutorial &&
+    (label.includes("main") || label.includes("school") || !isTutorial);
 
   const scopeLabel = admin
     ? "All campuses"

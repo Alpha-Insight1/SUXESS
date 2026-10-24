@@ -15,6 +15,14 @@ export type Profile = {
   } | null;
 };
 
+function normalizeRole(raw: unknown): UserRole {
+  const r = String(raw || "")
+    .trim()
+    .toLowerCase();
+  if (r === "admin" || r === "director" || r === "owner") return "admin";
+  return "secretary";
+}
+
 /**
  * Load the signed-in user's profile (role + campus).
  * Cached per request so layout + page don't double-fetch.
@@ -33,7 +41,7 @@ export const getCurrentProfile = cache(async (): Promise<Profile | null> => {
     .eq("id", user.id)
     .maybeSingle();
 
-  // No profile row → treat as restricted secretary (never default to admin)
+  // No profile row → restricted (not admin). Create a profiles row in Supabase.
   if (error || !profile) {
     return {
       id: user.id,
@@ -44,13 +52,10 @@ export const getCurrentProfile = cache(async (): Promise<Profile | null> => {
     };
   }
 
-  const role: UserRole =
-    profile.role === "admin" ? "admin" : "secretary";
-
   return {
     id: profile.id,
     full_name: profile.full_name,
-    role,
+    role: normalizeRole(profile.role),
     campus_id: profile.campus_id,
     campuses: Array.isArray(profile.campuses)
       ? profile.campuses[0] || null
@@ -66,12 +71,11 @@ export function isAdmin(profile: Profile | null): boolean {
  * Campus filter for queries.
  * - Admin → null (see all)
  * - Secretary with campus → that campus id
- * - Secretary without campus → sentinel so they see NO other campuses' rows
+ * - Secretary without campus → sentinel (see no campus data)
  */
 export function campusFilter(profile: Profile | null): string | null {
   if (!profile) return "00000000-0000-0000-0000-000000000000";
   if (profile.role === "admin") return null;
   if (profile.campus_id) return profile.campus_id;
-  // Secretary missing campus_id must not see all data
   return "00000000-0000-0000-0000-000000000000";
 }
