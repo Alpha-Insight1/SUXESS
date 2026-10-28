@@ -4,11 +4,14 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { addDaysToDate, formatCurrency } from "@/lib/utils";
-import { formatMoneyInput, parseMoneyInput } from "@/components/ui/money-input";
+import {
+  formatMoneyInput,
+  parseMoneyInput,
+  MoneyInput,
+} from "@/components/ui/money-input";
 
 type Unit = "days" | "weeks" | "months";
 
-/** Monthly fee ÷ 30 = per day (edit amount if your centre uses another rate). */
 function suggestedAmount(feeAmount: number, qty: number, unit: Unit) {
   if (!feeAmount || feeAmount <= 0 || !qty || qty <= 0) return 0;
   const perDay = feeAmount / 30;
@@ -21,7 +24,7 @@ function daysFromUnit(qty: number, unit: Unit) {
   const n = Math.max(1, Math.floor(qty) || 1);
   if (unit === "days") return n;
   if (unit === "weeks") return n * 7;
-  return n * 30; // 1 month ≈ 30 days for card length
+  return n * 30;
 }
 
 export function RenewCardButton({
@@ -40,8 +43,9 @@ export function RenewCardButton({
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [qty, setQty] = useState("1");
-  const [unit, setUnit] = useState<Unit>("months");
+  const [unit, setUnit] = useState<Unit>("days");
   const [amount, setAmount] = useState("");
+  const [amountTouched, setAmountTouched] = useState(false);
   const [method, setMethod] = useState("cash");
   const [fromDate, setFromDate] = useState(
     () => new Date().toISOString().slice(0, 10)
@@ -49,18 +53,34 @@ export function RenewCardButton({
   const router = useRouter();
   const supabase = createClient();
 
-  // Suggest amount when duration / fee changes (user can still edit)
+  // Suggest amount only until the secretary edits it (so ₦1,500 is allowed)
   useEffect(() => {
-    if (!open) return;
+    if (!open || amountTouched) return;
     const n = Number(qty) || 1;
     const sug = suggestedAmount(feeAmount, n, unit);
     if (sug > 0) setAmount(formatMoneyInput(String(sug)));
-  }, [open, qty, unit, feeAmount]);
+    else if (!amount) setAmount("");
+  }, [open, qty, unit, feeAmount, amountTouched]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const openModal = () => {
+    setAmountTouched(false);
+    setQty("1");
+    setUnit("days");
+    setFromDate(new Date().toISOString().slice(0, 10));
+    setMethod("cash");
+    const sug = suggestedAmount(feeAmount, 1, "days");
+    setAmount(sug > 0 ? formatMoneyInput(String(sug)) : "");
+    setOpen(true);
+  };
 
   const save = async () => {
     const paid = parseMoneyInput(amount);
     if (!paid || paid <= 0) {
-      alert("Enter the amount the parent paid.");
+      alert("Enter the amount the parent paid (e.g. 1,500).");
+      return;
+    }
+    if (!studentId) {
+      alert("Missing student. Open the student profile and try again.");
       return;
     }
     const n = Number(qty) || 1;
@@ -121,7 +141,7 @@ export function RenewCardButton({
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={openModal}
         className="text-xs font-semibold text-white bg-brand-green hover:bg-brand-dark px-2.5 py-1 rounded-md"
       >
         Renew + pay
@@ -137,7 +157,7 @@ export function RenewCardButton({
                 <span className="block text-xs text-gray-500 mt-0.5">
                   Monthly fee {formatCurrency(feeAmount)}
                   {perDay > 0 && (
-                    <> · ~{formatCurrency(perDay)}/day (÷ 30)</>
+                    <> · guide ~{formatCurrency(perDay)}/day</>
                   )}
                   <br />
                   Paid so far {formatCurrency(amountPaidSoFar)}
@@ -167,27 +187,37 @@ export function RenewCardButton({
                   <option value="months">Month(s)</option>
                 </select>
               </div>
-              <p className="text-xs text-gray-400 mt-1">
-                Examples: 1 day · 1 week · 1 month · 3 months
-              </p>
             </div>
 
             <div>
               <label className="block text-sm font-medium mb-1">
                 Amount paid now (₦) *
               </label>
-              <input
-                type="number"
-                min="1"
-                required
+              <MoneyInput
                 value={amount}
-                onChange={(e) => setAmount(formatMoneyInput(e.target.value))}
-                className="w-full border rounded-lg px-3 py-2 text-sm"
+                onValueChange={(display) => {
+                  setAmountTouched(true);
+                  setAmount(display);
+                }}
+                required
+                placeholder="e.g. 1,500"
               />
-              <p className="text-xs text-gray-400 mt-1">
-                Auto-filled from fee ÷ 30 × days (you can change it — e.g. ₦1,500
-                for 1 day if that is your rate)
+              <p className="text-xs text-gray-500 mt-1">
+                Type any amount — e.g. <strong>1,500</strong> for one day. The
+                suggested figure is only a guide; you can change it.
               </p>
+              <button
+                type="button"
+                className="text-xs text-brand-green font-medium mt-1 hover:underline"
+                onClick={() => {
+                  setAmountTouched(false);
+                  const n = Number(qty) || 1;
+                  const sug = suggestedAmount(feeAmount, n, unit);
+                  setAmount(sug > 0 ? formatMoneyInput(String(sug)) : "");
+                }}
+              >
+                Reset to suggested amount
+              </button>
             </div>
 
             <div>

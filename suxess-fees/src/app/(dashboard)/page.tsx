@@ -173,6 +173,25 @@ export default async function DashboardPage() {
   if (campusId) teacherPayMonthQ = teacherPayMonthQ.eq("campus_id", campusId);
 
 
+
+  let scholarshipsActiveQ = supabase
+    .from("scholarships")
+    .select("id, student_id, session, term, status", { count: "exact" })
+    .eq("status", "active");
+
+  let scholarshipsPendingQ = supabase
+    .from("scholarships")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "pending_approval");
+
+  let notificationsQ = supabase
+    .from("notifications")
+    .select("id, title, body, link, created_at, read_at")
+    .eq("target_role", "admin")
+    .is("read_at", null)
+    .order("created_at", { ascending: false })
+    .limit(10);
+
   let privateLessonMonthQ = supabase
     .from("private_lessons")
     .select("amount_paid, teacher_amount, lesson_date, campus_id")
@@ -313,6 +332,9 @@ export default async function DashboardPage() {
     { data: todayExpenses },
     teacherPayTodayRes,
     teacherPayMonthRes,
+    scholarshipsActiveRes,
+    scholarshipsPendingRes,
+    notificationsRes,
     privateLessonMonthRes,
     privateLessonTrendRes,
     privateLessonTodayRes,
@@ -340,6 +362,9 @@ export default async function DashboardPage() {
     expTodayQ,
     teacherPayTodayQ,
     teacherPayMonthQ,
+    scholarshipsActiveQ,
+    scholarshipsPendingQ,
+    notificationsQ,
     privateLessonMonthQ,
     privateLessonTrendQ,
     privateLessonTodayQ,
@@ -442,6 +467,12 @@ export default async function DashboardPage() {
     0
   );
   const debtorsCount = outstanding.length;
+  const scholarshipCount =
+    scholarshipsActiveRes?.count ??
+    (scholarshipsActiveRes?.data || []).length;
+  const scholarshipPendingCount = scholarshipsPendingRes?.count ?? 0;
+  const adminNotifications = notificationsRes?.data || [];
+
 
   const incomeToday =
     todayPayments?.reduce((s, p) => s + Number(p.amount || 0), 0) || 0;
@@ -847,6 +878,37 @@ export default async function DashboardPage() {
       {/* ========== ADMIN EXECUTIVE VIEW ========== */}
       {admin && (
         <div id="admin-privacy-root">
+          {(scholarshipPendingCount > 0 || adminNotifications.length > 0) && (
+            <div className="mb-6 bg-amber-50 border-2 border-amber-300 rounded-xl p-4">
+              <p className="font-bold text-amber-950 text-sm">
+                Director notifications
+              </p>
+              {scholarshipPendingCount > 0 && (
+                <p className="text-sm text-amber-900 mt-1">
+                  {scholarshipPendingCount} scholarship
+                  {scholarshipPendingCount === 1 ? "" : "s"} waiting for your
+                  approval (fees already paid — approve to subtract from school
+                  income).{" "}
+                  <Link
+                    href="/scholarships"
+                    className="font-semibold text-brand-green underline"
+                  >
+                    Review now
+                  </Link>
+                </p>
+              )}
+              {adminNotifications.length > 0 && (
+                <ul className="mt-2 space-y-1 text-sm text-amber-900">
+                  {adminNotifications.slice(0, 5).map((n: any) => (
+                    <li key={n.id}>
+                      <span className="font-medium">{n.title}</span>
+                      {n.body ? ` — ${n.body}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
           {/* ===== MONEY IN / MONEY OUT ===== */}
           <div className="mb-2">
             <h2 className="text-lg font-bold text-gray-900">Cashflow</h2>
@@ -1202,6 +1264,24 @@ export default async function DashboardPage() {
               </p>
               <p className="text-xs text-gray-500 mt-1">
                 Sales {formatCurrency(inventoryRevenueMonth)}
+              </p>
+            </div>
+            <div className="bg-white rounded-2xl border border-blue-100 shadow-sm p-5">
+              <div className="flex items-center gap-2 text-blue-800 text-sm">
+                Scholarships (active)
+              </div>
+              <p className="text-2xl font-bold text-blue-900 mt-2">
+                {scholarshipCount}
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                Students on scholarship ·{" "}
+                <Link href="/scholarships" className="text-brand-green font-medium">
+                  Manage
+                </Link>
+                {" · "}
+                <Link href="/fee-tracker" className="text-brand-green font-medium">
+                  Tracker
+                </Link>
               </p>
             </div>
             <div className="bg-white rounded-2xl border border-amber-100 shadow-sm p-5">

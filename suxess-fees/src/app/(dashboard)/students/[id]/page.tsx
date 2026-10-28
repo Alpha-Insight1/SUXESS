@@ -35,7 +35,7 @@ export default async function StudentProfilePage({
     redirect("/students");
   }
 
-  const [{ data: fees }, { data: payments }, { data: feeTypes }] =
+  const [{ data: fees }, { data: payments }, { data: feeTypes }, { data: scholarships }] =
     await Promise.all([
       supabase
         .from("student_fees")
@@ -53,6 +53,12 @@ export default async function StudentProfilePage({
         .order("payment_date", { ascending: false })
         .limit(50),
       supabase.from("fee_types").select("id, name").order("name"),
+      supabase
+        .from("scholarships")
+        .select("id, session, term, coverage, amount_covered, reason, status")
+        .eq("student_id", id)
+        .eq("status", "active")
+        .order("created_at", { ascending: false }),
     ]);
 
   const outstanding = (fees || []).filter((f) => Number(f.balance || 0) > 0);
@@ -93,6 +99,37 @@ export default async function StudentProfilePage({
           All students
         </Link>
       </div>
+
+      {(scholarships || []).length > 0 && (
+        <div className="bg-blue-50 border-2 border-blue-300 rounded-xl p-4">
+          <p className="text-sm font-bold text-blue-950">
+            Scholarship student
+          </p>
+          <ul className="mt-2 space-y-1 text-sm text-blue-900">
+            {(scholarships || []).map((s: any) => (
+              <li key={s.id}>
+                <span className="font-medium">
+                  {s.session} · {s.term}
+                </span>
+                {" — "}
+                {s.coverage === "full" ? "Full school fees" : "Partial"}
+                {s.coverage === "partial" && Number(s.amount_covered || 0) > 0
+                  ? ` (${formatCurrency(Number(s.amount_covered))})`
+                  : ""}
+                {s.reason ? (
+                  <span className="block text-xs text-blue-800 mt-0.5">
+                    Note: {s.reason}
+                  </span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+          <p className="text-xs text-blue-700 mt-2">
+            Do not charge full school fees for covered term(s) unless directed
+            by the director.
+          </p>
+        </div>
+      )}
 
       {/* Profile header */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 sm:p-6">
