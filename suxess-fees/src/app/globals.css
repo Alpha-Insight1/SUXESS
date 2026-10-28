@@ -1,0 +1,71 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --brand-green: #0B5C2E;
+  --brand-gold: #D4A017;
+}
+
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Mobile-friendly helpers */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+/* Tables: allow horizontal scroll on small screens */
+.table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Prevent accidental horizontal page scroll */
+html {
+  overflow-x: hidden;
+}
+
+/* Comfortable tap targets on forms */
+@layer base {
+  input,
+  select,
+  textarea,
+  button {
+    font-size: 16px; /* reduces iOS zoom-on-focus */
+  }
+}
+
+@media (min-width: 1024px) {
+  input,
+  select,
+  textarea,
+  button {
+    font-size: inherit;
+  }
+}
+
+/* Director privacy mode — hide money in public */
+body.privacy-mode [data-privacy="money"],
+body.privacy-mode .privacy-amount {
+  filter: blur(9px);
+  user-select: none;
+  transition: filter 0.15s ease;
+}
+
+/* Also blur large KPI figures and green/red money emphasis under admin shell */
+body.privacy-mode #admin-privacy-root .text-2xl,
+body.privacy-mode #admin-privacy-root .text-3xl,
+body.privacy-mode #admin-privacy-root .text-xl.font-bold,
+body.privacy-mode #admin-privacy-root .font-bold.text-green-700,
+body.privacy-mode #admin-privacy-root .font-bold.text-red-700,
+body.privacy-mode #admin-privacy-root .font-semibold.text-green-700,
+body.privacy-mode #admin-privacy-root .font-semibold.text-red-700,
+body.privacy-mode #admin-privacy-root .text-green-700.font-semibold,
+body.privacy-mode #admin-privacy-root .text-red-600,
+body.privacy-mode #admin-privacy-root .text-red-700 {
+  filter: blur(9px);
+  user-select: none;
+}
