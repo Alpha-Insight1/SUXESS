@@ -4,6 +4,7 @@ import { ExpenseForm } from "@/components/expenses/expense-form";
 import Link from "next/link";
 import { getCurrentProfile, campusFilter, isAdmin } from "@/lib/auth";
 import { ExportExpenses } from "@/components/expenses/export-expenses";
+import { ExpenseActions } from "@/components/expenses/expense-actions";
 
 export default async function ExpensesPage({
   searchParams,
@@ -108,6 +109,7 @@ export default async function ExpensesPage({
                 <th className="text-left px-4 py-3 font-medium">Description</th>
                 <th className="text-left px-4 py-3 font-medium">Amount</th>
                 <th className="text-left px-4 py-3 font-medium">Method</th>
+                <th className="text-left px-4 py-3 font-medium">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -129,12 +131,25 @@ export default async function ExpensesPage({
                       {formatCurrency(Number(e.amount || 0))}
                     </td>
                     <td className="px-4 py-3 capitalize">{e.payment_method}</td>
+                    <td className="px-4 py-3">
+                      <ExpenseActions
+                        expense={{
+                          id: e.id,
+                          expense_date: e.expense_date,
+                          category: e.category,
+                          description: e.description,
+                          amount: Number(e.amount || 0),
+                          payment_method: e.payment_method,
+                          notes: e.notes,
+                        }}
+                      />
+                    </td>
                   </tr>
                 ))
               ) : (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={7}
                     className="px-6 py-12 text-center text-gray-400"
                   >
                     No expenses recorded yet

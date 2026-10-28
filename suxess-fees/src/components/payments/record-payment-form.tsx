@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency, addMonths, addDaysToDate, isTutorialCampusName } from "@/lib/utils";
+import { MoneyInput, parseMoneyInput, formatMoneyInput } from "@/components/ui/money-input";
 import { isAllowedFeeTypeName } from "@/lib/fee-types";
 import { SmsReceiptButton } from "@/components/receipts/sms-receipt-button";
 
@@ -266,7 +267,7 @@ export function RecordPaymentForm({
 
   useEffect(() => {
     if (selectedFee) {
-      setFeeAmount(String(selectedFee.amount ?? ""));
+      setFeeAmount(formatMoneyInput(String(Math.round(Number(selectedFee.amount ?? 0)))));
       setSession(selectedFee.session || "2025/2026");
       setTerm(selectedFee.term || "First Term");
       setFeeTypeId(selectedFee.fee_type_id || "");
@@ -277,7 +278,7 @@ export function RecordPaymentForm({
     e.preventDefault();
     if (!studentId || !amountPaid) return;
 
-    const paid = Number(amountPaid);
+    const paid = parseMoneyInput(amountPaid);
     if (paid <= 0) {
       alert("Amount paid must be greater than 0");
       return;
@@ -308,7 +309,7 @@ export function RecordPaymentForm({
     let feeTerm = selectedFee?.term || (tutorial ? "Monthly" : term);
 
     if (createNewFee || (!studentFeeId && feeTypeId)) {
-      const totalOwed = Number(feeAmount);
+      const totalOwed = parseMoneyInput(feeAmount);
       if (!feeTypeId || !totalOwed || totalOwed <= 0) {
         alert("Please select a fee type and enter the fee amount (total owed).");
         setLoading(false);
@@ -754,7 +755,7 @@ export function RecordPaymentForm({
                   min="1"
                   step="1"
                   value={feeAmount}
-                  onChange={(e) => setFeeAmount(e.target.value)}
+                  onChange={(e) => setFeeAmount(formatMoneyInput(e.target.value))}
                   placeholder="Total amount for this fee"
                   className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-green"
                 />
@@ -891,7 +892,7 @@ export function RecordPaymentForm({
                 min="1"
                 step="1"
                 value={amountPaid}
-                onChange={(e) => setAmountPaid(e.target.value)}
+                onChange={(e) => setAmountPaid(formatMoneyInput(e.target.value))}
                 placeholder="How much is being paid"
                 className="w-full border rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-green"
               />

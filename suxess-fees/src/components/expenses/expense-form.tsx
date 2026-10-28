@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { MoneyInput, parseMoneyInput } from "@/components/ui/money-input";
 
 const CATEGORIES = [
   "Utilities",
@@ -51,7 +52,7 @@ export function ExpenseForm({
       expense_date: expenseDate,
       category,
       description,
-      amount: Number(amount),
+      amount: parseMoneyInput(amount),
       payment_method: method,
       notes: notes || null,
     });
@@ -125,15 +126,14 @@ export function ExpenseForm({
         </div>
         <div>
           <label className="block text-sm font-medium mb-1">Amount (₦) *</label>
-          <input
-            type="number"
-            required
-            min="1"
-            step="1"
+          <MoneyInput
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            className="w-full border rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-green"
+            onValueChange={(display) => setAmount(display)}
+            required
           />
+          <p className="text-xs text-gray-400 mt-1">
+            Use commas: 1,000 · 10,000 · 100,000
+          </p>
         </div>
       </div>
 

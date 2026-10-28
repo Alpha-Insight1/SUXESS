@@ -15,8 +15,6 @@ type StudentRow = {
   address?: string | null;
   department?: string | null;
   status?: string;
-  feesPaidThisTerm?: boolean;
-  feesPartialThisTerm?: boolean;
   campuses?:
     | { short_name?: string | null; name?: string | null }
     | { short_name?: string | null; name?: string | null }[]
@@ -71,16 +69,6 @@ export function StudentsTable({ students }: { students: StudentRow[] }) {
                   >
                     {s.full_name}
                   </Link>
-                  {s.feesPaidThisTerm && (
-                    <span className="ml-2 inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-800">
-                      Fees paid
-                    </span>
-                  )}
-                  {s.feesPartialThisTerm && (
-                    <span className="ml-2 inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-900">
-                      Partial fees
-                    </span>
-                  )}
                 </td>
                 <td className="px-4 py-3">{s.class_name}</td>
                 <td className="px-4 py-3">{s.department || "—"}</td>

@@ -180,6 +180,12 @@ export default async function DashboardPage() {
     .lte("lesson_date", monthEnd);
   if (campusId) privateLessonMonthQ = privateLessonMonthQ.eq("campus_id", campusId);
 
+  let privateLessonTrendQ = supabase
+    .from("private_lessons")
+    .select("amount_paid, teacher_amount, lesson_date, campus_id")
+    .gte("lesson_date", sixMonthsStart);
+  if (campusId) privateLessonTrendQ = privateLessonTrendQ.eq("campus_id", campusId);
+
   
   let privateLessonDueTodayQ = supabase
     .from("private_lessons")
@@ -254,6 +260,11 @@ export default async function DashboardPage() {
     .gte("sale_date", monthStart)
     .lte("sale_date", monthEnd);
 
+  let invTrendQ = supabase
+    .from("inventory_sales")
+    .select("profit, total_price, sale_date, campus_id")
+    .gte("sale_date", sixMonthsStart);
+
   let invTodayQ = supabase
     .from("inventory_sales")
     .select("profit, total_price")
@@ -303,6 +314,7 @@ export default async function DashboardPage() {
     teacherPayTodayRes,
     teacherPayMonthRes,
     privateLessonMonthRes,
+    privateLessonTrendRes,
     privateLessonTodayRes,
     privateLessonDueTodayRes,
     teacherPayTrendRes,
@@ -314,6 +326,7 @@ export default async function DashboardPage() {
     { data: trendPayments },
     { data: trendExpenses },
     invMonthRes,
+    invTrendRes,
     invTodayRes,
     { data: renewals },
     { data: examFeesRaw },
@@ -328,6 +341,7 @@ export default async function DashboardPage() {
     teacherPayTodayQ,
     teacherPayMonthQ,
     privateLessonMonthQ,
+    privateLessonTrendQ,
     privateLessonTodayQ,
     privateLessonDueTodayQ,
     teacherPayTrendQ,
@@ -339,6 +353,7 @@ export default async function DashboardPage() {
     payTrendQ,
     expTrendQ,
     invMonthQ,
+    invTrendQ,
     invTodayQ,
     renewalsQ,
     examQ,
@@ -468,11 +483,47 @@ export default async function DashboardPage() {
     (s: number, r: any) => s + Number(r.profit || 0),
     0
   );
+  const inventoryRevenueToday = todayInvSales.reduce(
+    (s: number, r: any) => s + Number(r.total_price || 0),
+    0
+  );
+
+  const privateLessonInToday = (privateLessonTodayRes?.data || []).reduce(
+    (s: number, r: any) => s + Number(r.amount_paid || 0),
+    0
+  );
+  const privateLessonOutToday = (privateLessonTodayRes?.data || []).reduce(
+    (s: number, r: any) => s + Number(r.teacher_amount || 0),
+    0
+  );
+  const privateLessonInMonth = (privateLessonMonthRes?.data || []).reduce(
+    (s: number, r: any) => s + Number(r.amount_paid || 0),
+    0
+  );
+  const privateLessonOutMonth = (privateLessonMonthRes?.data || []).reduce(
+    (s: number, r: any) => s + Number(r.teacher_amount || 0),
+    0
+  );
+
+  // Cashflow board: money in / money out / net
+  const moneyInToday =
+    incomeToday + inventoryRevenueToday + privateLessonInToday;
+  const moneyOutToday =
+    expensesTodayAmt + teacherPayTodayAmt + privateLessonOutToday;
+  const netToday = moneyInToday - moneyOutToday;
 
   const totalIncomeMonth =
     monthPayments?.reduce((s, p) => s + Number(p.amount || 0), 0) || 0;
   const totalExpensesMonth =
     monthExpenses?.reduce((s, e) => s + Number(e.amount || 0), 0) || 0;
+
+  const moneyInMonth =
+    totalIncomeMonth + inventoryRevenueMonth + privateLessonInMonth;
+  const moneyOutMonth =
+    totalExpensesMonth + teacherPayMonthAmt + privateLessonOutMonth;
+  // Operational net (cash movement) — staff salary line kept separate as planned cost
+  const netMonthOps = moneyInMonth - moneyOutMonth;
+
   const totalPayroll =
     activeStaff?.reduce((s, x) => s + Number(x.salary || 0), 0) || 0;
   const allLoans = loansRes?.data || [];
@@ -635,37 +686,97 @@ export default async function DashboardPage() {
     profit: r.income - r.expenses,
   }));
 
-  // Monthly analysis (last 6 months) for admin
+  // Monthly analysis (last 6 months) — uses payment_date / expense_date so
+  // backdated entries land in the correct month for the director.
   const monthlyAnalysis: {
     key: string;
     label: string;
-    income: number;
-    expenses: number;
+    isCurrent: boolean;
+    isLast: boolean;
+    moneyIn: number;
+    feesIn: number;
+    inventoryIn: number;
+    privateIn: number;
+    moneyOut: number;
+    expensesOut: number;
+    teacherOut: number;
+    privateOut: number;
     profit: number;
   }[] = [];
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     const label = d.toLocaleString("en-NG", { month: "short", year: "numeric" });
-    monthlyAnalysis.push({ key, label, income: 0, expenses: 0, profit: 0 });
+    monthlyAnalysis.push({
+      key,
+      label,
+      isCurrent: i === 0,
+      isLast: i === 1,
+      moneyIn: 0,
+      feesIn: 0,
+      inventoryIn: 0,
+      privateIn: 0,
+      moneyOut: 0,
+      expensesOut: 0,
+      teacherOut: 0,
+      privateOut: 0,
+      profit: 0,
+    });
   }
   const monthMap = new Map(monthlyAnalysis.map((m) => [m.key, m]));
   for (const p of trendPayments || []) {
     const key = String(p.payment_date || "").slice(0, 7);
-    if (monthMap.has(key)) monthMap.get(key)!.income += Number(p.amount || 0);
+    const m = monthMap.get(key);
+    if (m) {
+      const a = Number(p.amount || 0);
+      m.feesIn += a;
+      m.moneyIn += a;
+    }
   }
   for (const e of trendExpenses || []) {
     const key = String(e.expense_date || "").slice(0, 7);
-    if (monthMap.has(key)) monthMap.get(key)!.expenses += Number(e.amount || 0);
+    const m = monthMap.get(key);
+    if (m) {
+      const a = Number(e.amount || 0);
+      m.expensesOut += a;
+      m.moneyOut += a;
+    }
   }
-  // Also fold teacher pay into monthly expenses for analysis
   for (const e of teacherPayTrendRes?.data || []) {
     const key = String(e.payment_date || "").slice(0, 7);
-    if (monthMap.has(key)) monthMap.get(key)!.expenses += Number(e.amount || 0);
+    const m = monthMap.get(key);
+    if (m) {
+      const a = Number(e.amount || 0);
+      m.teacherOut += a;
+      m.moneyOut += a;
+    }
+  }
+  for (const e of invTrendRes?.data || []) {
+    const key = String(e.sale_date || "").slice(0, 7);
+    const m = monthMap.get(key);
+    if (m) {
+      const a = Number(e.total_price || 0);
+      m.inventoryIn += a;
+      m.moneyIn += a;
+    }
+  }
+  for (const e of privateLessonTrendRes?.data || []) {
+    const key = String(e.lesson_date || "").slice(0, 7);
+    const m = monthMap.get(key);
+    if (m) {
+      const pin = Number(e.amount_paid || 0);
+      const pout = Number(e.teacher_amount || 0);
+      m.privateIn += pin;
+      m.privateOut += pout;
+      m.moneyIn += pin;
+      m.moneyOut += pout;
+    }
   }
   for (const m of monthlyAnalysis) {
-    m.profit = m.income - m.expenses;
+    m.profit = m.moneyIn - m.moneyOut;
   }
+  const lastMonthStats = monthlyAnalysis.find((m) => m.isLast);
+  const thisMonthStats = monthlyAnalysis.find((m) => m.isCurrent);
 
 
   const paymentCountToday = todayPayments?.length || 0;
@@ -736,95 +847,336 @@ export default async function DashboardPage() {
       {/* ========== ADMIN EXECUTIVE VIEW ========== */}
       {admin && (
         <div id="admin-privacy-root">
-          {/* KPI strip */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-              <div className="flex items-center gap-2 text-gray-500 text-xs font-medium uppercase tracking-wide">
-                <Users className="w-3.5 h-3.5" /> Active students
-              </div>
-              <p className="text-3xl font-bold text-gray-900 mt-2">
-                {totalStudents ?? 0}
+          {/* ===== MONEY IN / MONEY OUT ===== */}
+          <div className="mb-2">
+            <h2 className="text-lg font-bold text-gray-900">Cashflow</h2>
+            <p className="text-sm text-gray-500">
+              Money in, money out, and net — today and this month
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+            <div className="bg-white rounded-2xl border border-green-100 shadow-sm p-5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-green-800">
+                Money in · today
               </p>
-              <p className="text-xs text-gray-400 mt-1">
-                Paid school fees or tuition · {registeredTotal} registered
+              <p className="text-3xl font-bold text-green-700 mt-2">
+                {formatCurrency(moneyInToday)}
               </p>
+              <ul className="mt-3 text-xs text-gray-600 space-y-1">
+                <li className="flex justify-between gap-2">
+                  <span>Student fees</span>
+                  <span className="font-medium">{formatCurrency(incomeToday)}</span>
+                </li>
+                <li className="flex justify-between gap-2">
+                  <span>Inventory sales</span>
+                  <span className="font-medium">
+                    {formatCurrency(inventoryRevenueToday)}
+                  </span>
+                </li>
+                <li className="flex justify-between gap-2">
+                  <span>Private lessons (parents)</span>
+                  <span className="font-medium">
+                    {formatCurrency(privateLessonInToday)}
+                  </span>
+                </li>
+              </ul>
             </div>
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-              <div className="flex items-center gap-2 text-gray-500 text-xs font-medium uppercase tracking-wide">
-                <CreditCard className="w-3.5 h-3.5" /> Collected today
-              </div>
-              <p className="text-3xl font-bold text-gray-900 mt-2">
-                {formatCurrency(incomeToday)}
+            <div className="bg-white rounded-2xl border border-red-100 shadow-sm p-5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-red-800">
+                Money out · today
               </p>
-              <p className="text-xs text-gray-400 mt-1">
-                {paymentCountToday} payment{paymentCountToday === 1 ? "" : "s"}
+              <p className="text-3xl font-bold text-red-700 mt-2">
+                {formatCurrency(moneyOutToday)}
               </p>
+              <ul className="mt-3 text-xs text-gray-600 space-y-1">
+                <li className="flex justify-between gap-2">
+                  <span>Branch expenses</span>
+                  <span className="font-medium">
+                    {formatCurrency(expensesTodayAmt)}
+                  </span>
+                </li>
+                <li className="flex justify-between gap-2">
+                  <span>Teacher daily pay</span>
+                  <span className="font-medium">
+                    {formatCurrency(teacherPayTodayAmt)}
+                  </span>
+                </li>
+                <li className="flex justify-between gap-2">
+                  <span>Private lesson teachers</span>
+                  <span className="font-medium">
+                    {formatCurrency(privateLessonOutToday)}
+                  </span>
+                </li>
+              </ul>
             </div>
             <div
               className={`rounded-2xl border shadow-sm p-5 ${
-                profitToday >= 0
-                  ? "bg-green-50 border-green-100"
-                  : "bg-red-50 border-red-100"
+                netToday >= 0
+                  ? "bg-green-50 border-green-200"
+                  : "bg-red-50 border-red-200"
               }`}
             >
-              <div className="flex items-center gap-2 text-gray-600 text-xs font-medium uppercase tracking-wide">
-                <CalendarDays className="w-3.5 h-3.5" /> Profit today
-              </div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-700">
+                Net · today
+              </p>
               <p
                 className={`text-3xl font-bold mt-2 flex items-center gap-2 ${
-                  profitToday >= 0 ? "text-green-700" : "text-red-700"
+                  netToday >= 0 ? "text-green-800" : "text-red-800"
                 }`}
               >
-                {profitToday >= 0 ? (
+                {netToday >= 0 ? (
                   <TrendingUp className="w-6 h-6" />
                 ) : (
                   <TrendingDown className="w-6 h-6" />
                 )}
-                {formatCurrency(profitToday)}
+                {formatCurrency(netToday)}
               </p>
-              <p className="text-xs text-gray-500 mt-1">
-                Fees − expenses − teacher pay + inventory
+              <p className="text-xs text-gray-500 mt-2">
+                Money in − money out
               </p>
-            </div>
-            <div
-              className={`rounded-2xl border shadow-sm p-5 ${
-                profitMonth >= 0
-                  ? "bg-green-50 border-green-100"
-                  : "bg-red-50 border-red-100"
-              }`}
-            >
-              <div className="flex items-center gap-2 text-gray-600 text-xs font-medium uppercase tracking-wide">
-                <CalendarRange className="w-3.5 h-3.5" /> Profit · {monthLabel}
-              </div>
-              <p
-                className={`text-3xl font-bold mt-2 ${
-                  profitMonth >= 0 ? "text-green-700" : "text-red-700"
-                }`}
-              >
-                {formatCurrency(profitMonth)}
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                After expenses & staff salaries
+              <p className="text-xs text-gray-400 mt-1">
+                {paymentCountToday} fee payment
+                {paymentCountToday === 1 ? "" : "s"} today
               </p>
             </div>
           </div>
 
-          {/* Money + risk row */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-              <div className="flex items-center gap-2 text-gray-500 text-sm">
-                <Wallet className="w-4 h-4" /> Income this month
-              </div>
-              <p className="text-2xl font-bold text-gray-900 mt-2">
-                {formatCurrency(totalIncomeMonth)}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+            <div className="bg-white rounded-2xl border border-green-100 shadow-sm p-5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-green-800">
+                Money in · {monthLabel}
+              </p>
+              <p className="text-3xl font-bold text-green-700 mt-2">
+                {formatCurrency(moneyInMonth)}
+              </p>
+              <ul className="mt-3 text-xs text-gray-600 space-y-1">
+                <li className="flex justify-between gap-2">
+                  <span>Student fees</span>
+                  <span className="font-medium">
+                    {formatCurrency(totalIncomeMonth)}
+                  </span>
+                </li>
+                <li className="flex justify-between gap-2">
+                  <span>Inventory sales</span>
+                  <span className="font-medium">
+                    {formatCurrency(inventoryRevenueMonth)}
+                  </span>
+                </li>
+                <li className="flex justify-between gap-2">
+                  <span>Private lessons (parents)</span>
+                  <span className="font-medium">
+                    {formatCurrency(privateLessonInMonth)}
+                  </span>
+                </li>
+              </ul>
+            </div>
+            <div className="bg-white rounded-2xl border border-red-100 shadow-sm p-5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-red-800">
+                Money out · {monthLabel}
+              </p>
+              <p className="text-3xl font-bold text-red-700 mt-2">
+                {formatCurrency(moneyOutMonth)}
+              </p>
+              <ul className="mt-3 text-xs text-gray-600 space-y-1">
+                <li className="flex justify-between gap-2">
+                  <span>Branch expenses</span>
+                  <span className="font-medium">
+                    {formatCurrency(totalExpensesMonth)}
+                  </span>
+                </li>
+                <li className="flex justify-between gap-2">
+                  <span>Teacher daily pay</span>
+                  <span className="font-medium">
+                    {formatCurrency(teacherPayMonthAmt)}
+                  </span>
+                </li>
+                <li className="flex justify-between gap-2">
+                  <span>Private lesson teachers</span>
+                  <span className="font-medium">
+                    {formatCurrency(privateLessonOutMonth)}
+                  </span>
+                </li>
+              </ul>
+            </div>
+            <div
+              className={`rounded-2xl border shadow-sm p-5 ${
+                netMonthOps >= 0
+                  ? "bg-green-50 border-green-200"
+                  : "bg-red-50 border-red-200"
+              }`}
+            >
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-700">
+                Net · {monthLabel}
+              </p>
+              <p
+                className={`text-3xl font-bold mt-2 ${
+                  netMonthOps >= 0 ? "text-green-800" : "text-red-800"
+                }`}
+              >
+                {formatCurrency(netMonthOps)}
+              </p>
+              <p className="text-xs text-gray-500 mt-2">
+                Operational net (before full staff salary line)
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                Staff salaries on books: {formatCurrency(totalPayroll)}
               </p>
             </div>
+          </div>
+
+          {/* Monthly stats — includes last month (backdated dates) */}
+          <div className="mb-8">
+            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 mb-3">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Monthly statistics</h2>
+                <p className="text-sm text-gray-500">
+                  Based on the date on each payment/expense (not when it was typed).
+                  Last month appears if secretaries entered past dates.
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              {thisMonthStats && (
+                <div className="bg-white rounded-2xl border-2 border-brand-green/30 shadow-sm p-5">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-brand-green">
+                    This month · {thisMonthStats.label}
+                  </p>
+                  <div className="grid grid-cols-3 gap-3 mt-3">
+                    <div>
+                      <p className="text-xs text-gray-500">Money in</p>
+                      <p className="text-lg font-bold text-green-700">
+                        {formatCurrency(thisMonthStats.moneyIn)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Expenses + pay out</p>
+                      <p className="text-lg font-bold text-red-700">
+                        {formatCurrency(thisMonthStats.moneyOut)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Profit</p>
+                      <p
+                        className={`text-lg font-bold ${
+                          thisMonthStats.profit >= 0
+                            ? "text-green-800"
+                            : "text-red-800"
+                        }`}
+                      >
+                        {formatCurrency(thisMonthStats.profit)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {lastMonthStats && (
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-600">
+                    Last month · {lastMonthStats.label}
+                  </p>
+                  <div className="grid grid-cols-3 gap-3 mt-3">
+                    <div>
+                      <p className="text-xs text-gray-500">Money in</p>
+                      <p className="text-lg font-bold text-green-700">
+                        {formatCurrency(lastMonthStats.moneyIn)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Expenses + pay out</p>
+                      <p className="text-lg font-bold text-red-700">
+                        {formatCurrency(lastMonthStats.moneyOut)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Profit</p>
+                      <p
+                        className={`text-lg font-bold ${
+                          lastMonthStats.profit >= 0
+                            ? "text-green-800"
+                            : "text-red-800"
+                        }`}
+                      >
+                        {formatCurrency(lastMonthStats.profit)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="px-5 py-3 border-b bg-gray-50">
+                <h3 className="font-semibold text-gray-900 text-sm">
+                  Last 6 months
+                </h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="text-gray-500 bg-white">
+                    <tr>
+                      <th className="text-left px-4 py-2 font-medium">Month</th>
+                      <th className="text-right px-4 py-2 font-medium">Money in</th>
+                      <th className="text-right px-4 py-2 font-medium">Money out</th>
+                      <th className="text-right px-4 py-2 font-medium">Profit</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {[...monthlyAnalysis].reverse().map((m) => (
+                      <tr
+                        key={m.key}
+                        className={
+                          m.isCurrent
+                            ? "bg-green-50/50"
+                            : m.isLast
+                              ? "bg-gray-50"
+                              : "hover:bg-gray-50"
+                        }
+                      >
+                        <td className="px-4 py-2.5 font-medium">
+                          {m.label}
+                          {m.isCurrent && (
+                            <span className="ml-2 text-[10px] uppercase text-brand-green">
+                              current
+                            </span>
+                          )}
+                          {m.isLast && (
+                            <span className="ml-2 text-[10px] uppercase text-gray-400">
+                              last
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-green-700 font-medium">
+                          {formatCurrency(m.moneyIn)}
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-red-700 font-medium">
+                          {formatCurrency(m.moneyOut)}
+                        </td>
+                        <td
+                          className={`px-4 py-2.5 text-right font-bold ${
+                            m.profit >= 0 ? "text-green-800" : "text-red-800"
+                          }`}
+                        >
+                          {formatCurrency(m.profit)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          {/* Snapshot ops */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-              <div className="flex items-center gap-2 text-gray-500 text-sm">
-                <Activity className="w-4 h-4" /> Expenses this month
+              <div className="flex items-center gap-2 text-gray-500 text-xs font-medium uppercase tracking-wide">
+                <Users className="w-3.5 h-3.5" /> Active students
               </div>
               <p className="text-2xl font-bold text-gray-900 mt-2">
-                {formatCurrency(totalExpensesMonth)}
+                {totalStudents ?? 0}
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                {registeredTotal} registered
               </p>
             </div>
             <div className="bg-white rounded-2xl border border-red-100 shadow-sm p-5">
@@ -835,7 +1187,7 @@ export default async function DashboardPage() {
                 {formatCurrency(totalOutstanding)}
               </p>
               <p className="text-xs text-gray-500 mt-1">
-                {debtorsCount} open balance{debtorsCount === 1 ? "" : "s"} ·{" "}
+                {debtorsCount} open ·{" "}
                 <Link href="/outstanding" className="text-brand-green font-medium">
                   View
                 </Link>
@@ -849,22 +1201,17 @@ export default async function DashboardPage() {
                 {formatCurrency(inventoryProfitMonth)}
               </p>
               <p className="text-xs text-gray-500 mt-1">
-                Revenue {formatCurrency(inventoryRevenueMonth)}
+                Sales {formatCurrency(inventoryRevenueMonth)}
               </p>
             </div>
-            <div className="bg-white rounded-2xl border border-amber-100 shadow-sm p-5 sm:col-span-2 xl:col-span-1">
+            <div className="bg-white rounded-2xl border border-amber-100 shadow-sm p-5">
               <div className="flex items-center gap-2 text-amber-800 text-sm">
-                <Banknote className="w-4 h-4" /> Staff loans outstanding
+                <Banknote className="w-4 h-4" /> Loans outstanding
               </div>
               <p className="text-2xl font-bold text-amber-900 mt-2">
                 {formatCurrency(loanOutstanding)}
               </p>
               <p className="text-xs text-gray-500 mt-1">
-                Given out {formatCurrency(loanTotalGiven)} · Recovered{" "}
-                {formatCurrency(loanRecovered)}
-              </p>
-              <p className="text-xs text-gray-500">
-                Monthly deductions {formatCurrency(loanDeductionsMonth)} ·{" "}
                 <Link href="/loans" className="text-brand-green font-medium">
                   Manage loans
                 </Link>

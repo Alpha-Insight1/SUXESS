@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { addDaysToDate, formatCurrency } from "@/lib/utils";
+import { formatMoneyInput, parseMoneyInput } from "@/components/ui/money-input";
 
 type Unit = "days" | "weeks" | "months";
 
@@ -53,11 +54,11 @@ export function RenewCardButton({
     if (!open) return;
     const n = Number(qty) || 1;
     const sug = suggestedAmount(feeAmount, n, unit);
-    if (sug > 0) setAmount(String(sug));
+    if (sug > 0) setAmount(formatMoneyInput(String(sug)));
   }, [open, qty, unit, feeAmount]);
 
   const save = async () => {
-    const paid = Number(amount);
+    const paid = parseMoneyInput(amount);
     if (!paid || paid <= 0) {
       alert("Enter the amount the parent paid.");
       return;
@@ -180,7 +181,7 @@ export function RenewCardButton({
                 min="1"
                 required
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={(e) => setAmount(formatMoneyInput(e.target.value))}
                 className="w-full border rounded-lg px-3 py-2 text-sm"
               />
               <p className="text-xs text-gray-400 mt-1">

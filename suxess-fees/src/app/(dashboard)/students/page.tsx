@@ -14,8 +14,6 @@ export default async function StudentsPage({
     q?: string;
     status?: string;
     class?: string;
-    session?: string;
-    term?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -27,8 +25,6 @@ export default async function StudentsPage({
   const activeCampus = lockedCampus || params.campus || undefined;
   const statusFilter = params.status || "active";
   const classFilter = params.class?.trim() || "";
-  const sessionFocus = (params.session || "2025/2026").trim();
-  const termFocus = (params.term || "First Term").trim();
 
   let query = supabase
     .from("students")
@@ -65,49 +61,8 @@ export default async function StudentsPage({
     .limit(1000);
   if (activeCampus) classesQuery = classesQuery.eq("campus_id", activeCampus);
 
-  const [
-    { data: studentsRaw },
-    { data: campuses },
-    { data: classRows },
-    { data: feeTypes },
-  ] = await Promise.all([
-    query,
-    campusesQuery,
-    classesQuery,
-    supabase.from("fee_types").select("id, name"),
-  ]);
-
-  const schoolFeeTypeIds = (feeTypes || [])
-    .filter((ft: any) => {
-      const n = String(ft.name || "").toLowerCase();
-      return (
-        n.includes("school fee") ||
-        n.includes("tuition") ||
-        n.includes("schoolfees")
-      );
-    })
-    .map((ft: any) => ft.id);
-
-  const paidStudentIds = new Set<string>();
-  const fullyPaidIds = new Set<string>();
-
-  if (schoolFeeTypeIds.length > 0) {
-    const { data: feeRows } = await supabase
-      .from("student_fees")
-      .select("student_id, balance, amount_paid, term, session")
-      .in("fee_type_id", schoolFeeTypeIds)
-      .eq("session", sessionFocus)
-      .or(`term.eq.${termFocus},term.eq.Monthly`)
-      .gt("amount_paid", 0)
-      .limit(5000);
-
-    for (const f of feeRows || []) {
-      paidStudentIds.add(f.student_id);
-      if (Number(f.balance || 0) <= 0) {
-        fullyPaidIds.add(f.student_id);
-      }
-    }
-  }
+  const [{ data: students }, { data: campuses }, { data: classRows }] =
+    await Promise.all([query, campusesQuery, classesQuery]);
 
   const classSet = new Set<string>();
   for (const r of classRows || []) {
@@ -117,23 +72,6 @@ export default async function StudentsPage({
   const classList = Array.from(classSet).sort((a, b) =>
     a.localeCompare(b, undefined, { sensitivity: "base" })
   );
-
-  const students = [...(studentsRaw || [])]
-    .map((s: any) => ({
-      ...s,
-      feesPaidThisTerm: fullyPaidIds.has(s.id),
-      feesPartialThisTerm:
-        paidStudentIds.has(s.id) && !fullyPaidIds.has(s.id),
-    }))
-    .sort((a: any, b: any) => {
-      const score = (s: any) =>
-        s.feesPaidThisTerm ? 0 : s.feesPartialThisTerm ? 1 : 2;
-      const d = score(a) - score(b);
-      if (d !== 0) return d;
-      return String(b.created_at || "").localeCompare(
-        String(a.created_at || "")
-      );
-    });
 
   function buildHref(opts: {
     status?: string;
@@ -151,8 +89,6 @@ export default async function StudentsPage({
     if (cl) p.set("class", cl);
     if (admin && params.campus) p.set("campus", params.campus);
     if (params.q) p.set("q", params.q);
-    if (params.session) p.set("session", params.session);
-    if (params.term) p.set("term", params.term);
     const qs = p.toString();
     return qs ? `/students?${qs}` : "/students";
   }
@@ -164,8 +100,6 @@ export default async function StudentsPage({
     { id: "inactive", label: "Inactive" },
     { id: "all", label: "All" },
   ];
-
-  const paidCount = students.filter((s) => s.feesPaidThisTerm).length;
 
   return (
     <div>
@@ -271,20 +205,15 @@ export default async function StudentsPage({
         </div>
       )}
 
-      <p className="text-sm text-gray-500 mb-1">
-        Showing {students.length} student{students.length === 1 ? "" : "s"}
+      <p className="text-sm text-gray-500 mb-3">
+        Showing {students?.length || 0} student
+        {(students?.length || 0) === 1 ? "" : "s"}
         {statusFilter !== "all" ? ` · ${statusFilter}` : ""}
         {classFilter ? ` · ${classFilter}` : ""}
         {params.q ? ` · “${params.q}”` : ""}
       </p>
-      <p className="text-xs text-gray-500 mb-3">
-        <span className="font-medium text-green-800">
-          {paidCount} paid school fees / tuition
-        </span>{" "}
-        for {sessionFocus} · {termFocus} — listed at the top with a green badge.
-      </p>
 
-      <StudentsTable students={students} />
+      <StudentsTable students={students || []} />
     </div>
   );
 }
