@@ -315,6 +315,59 @@ export function RecordPaymentForm({
         return;
       }
 
+      // Prevent double school fees: same student + fee type + session + term
+      const termKey = tutorial ? "Monthly" : feeTerm;
+      const { data: existingFees } = await supabase
+        .from("student_fees")
+        .select("id, amount, amount_paid, balance, status, session, term, fee_types(name)")
+        .eq("student_id", studentId)
+        .eq("fee_type_id", feeTypeId)
+        .eq("session", feeSession)
+        .eq("term", termKey);
+
+      const openDup = (existingFees || []).filter(
+        (f: any) => Number(f.balance || 0) > 0
+      );
+      if (openDup.length > 0) {
+        const d = openDup[0];
+        alert(
+          "This student already has this fee for " +
+            feeSession +
+            (termKey && termKey !== "Monthly" ? " · " + termKey : "") +
+            " with balance " +
+            Number(d.balance).toLocaleString() +
+            ". Do NOT create a second fee.\n\nSelect the outstanding fee in the list above and record the payment against it."
+        );
+        setLoading(false);
+        setCreateNewFee(false);
+        setStudentFeeId(d.id);
+        // refresh outstanding list
+        const { data } = await supabase
+          .from("student_fees")
+          .select("*, fee_types(name)")
+          .eq("student_id", studentId)
+          .gt("balance", 0);
+        setOutstandingFees((data as OutstandingFee[]) || []);
+        return;
+      }
+
+      const paidDup = (existingFees || []).filter(
+        (f: any) => Number(f.balance || 0) <= 0
+      );
+      if (paidDup.length > 0 && !tutorial) {
+        const ok = confirm(
+          "This student already paid this fee for " +
+            feeSession +
+            " · " +
+            termKey +
+            ".\n\nCreating another fee will look like they were charged twice.\n\nOnly continue if this is a different charge (e.g. extra levy). Continue?"
+        );
+        if (!ok) {
+          setLoading(false);
+          return;
+        }
+      }
+
       const { data: newFee, error: feeError } = await supabase
         .from("student_fees")
         .insert({
@@ -647,6 +700,10 @@ export function RecordPaymentForm({
               <button
                 type="button"
                 onClick={() => {
+                  const ok = confirm(
+                    "Only create a NEW fee if this student does not already have School Fees / this fee for the same session and term.\n\nIf they still owe, select the outstanding fee above instead."
+                  );
+                  if (!ok) return;
                   setCreateNewFee(true);
                   setStudentFeeId("");
                   setFeeAmount("");
@@ -655,6 +712,10 @@ export function RecordPaymentForm({
               >
                 + Create new fee instead
               </button>
+              <p className="text-xs text-amber-800 mt-2 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1.5">
+                School fees: use the outstanding line for the same session/term.
+                Creating a second fee for the same term is usually a mistake.
+              </p>
             </div>
           )}
 

@@ -18,7 +18,7 @@ export default async function PrivateLessonsPage() {
   let lessonsQuery = supabase
     .from("private_lessons")
     .select(
-      "id, parent_name, parent_phone, student_name, amount_paid, teacher_name, teacher_amount, lesson_date, due_date, notes, campuses(short_name, name)"
+      "id, parent_name, parent_phone, student_name, amount_paid, teacher_name, teacher_amount, teachers, lesson_date, due_date, notes, campuses(short_name, name)"
     )
     .order("lesson_date", { ascending: false })
     .limit(200);
@@ -42,6 +42,7 @@ export default async function PrivateLessonsPage() {
   const monthProfit = list
     .filter((r) => r.lesson_date >= monthStart)
     .reduce((s, r) => s + profitOf(r), 0);
+  const dueTodayList = list.filter((r) => r.due_date === today);
   const monthPaid = list
     .filter((r) => r.lesson_date >= monthStart)
     .reduce((s, r) => s + Number(r.amount_paid || 0), 0);
@@ -63,6 +64,26 @@ export default async function PrivateLessonsPage() {
           lockedCampusId={lockedCampus}
         />
       </div>
+
+      {dueTodayList.length > 0 && (
+        <div className="mb-4 bg-amber-50 border-2 border-amber-300 text-amber-950 rounded-xl p-4">
+          <p className="font-bold text-sm">
+            Private lessons due today ({dueTodayList.length})
+          </p>
+          <ul className="mt-2 text-sm space-y-1">
+            {dueTodayList.map((r: any) => (
+              <li key={r.id}>
+                <span className="font-medium">{r.parent_name}</span>
+                {r.student_name ? ` · ${r.student_name}` : ""}
+                {" · "}
+                {r.teacher_name}
+                {" · paid "}
+                {formatCurrency(Number(r.amount_paid || 0))}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {error && (
         <div className="mb-4 bg-red-50 border border-red-200 text-red-800 text-sm rounded-lg p-3">
@@ -137,7 +158,19 @@ export default async function PrivateLessonsPage() {
                           {r.student_name || r.parent_phone || ""}
                         </div>
                       </td>
-                      <td className="px-3 py-2">{r.teacher_name}</td>
+                      <td className="px-3 py-2">
+                      {Array.isArray(r.teachers) && r.teachers.length > 0 ? (
+                        <ul className="text-xs space-y-0.5">
+                          {r.teachers.map((t: any, i: number) => (
+                            <li key={i}>
+                              {t.name}: {formatCurrency(Number(t.amount || 0))}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        r.teacher_name
+                      )}
+                    </td>
                       <td className="px-3 py-2 text-right">
                         {formatCurrency(Number(r.amount_paid || 0))}
                       </td>

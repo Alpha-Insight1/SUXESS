@@ -180,6 +180,13 @@ export default async function DashboardPage() {
     .lte("lesson_date", monthEnd);
   if (campusId) privateLessonMonthQ = privateLessonMonthQ.eq("campus_id", campusId);
 
+  
+  let privateLessonDueTodayQ = supabase
+    .from("private_lessons")
+    .select("id, parent_name, student_name, due_date, amount_paid")
+    .eq("due_date", today);
+  if (campusId) privateLessonDueTodayQ = privateLessonDueTodayQ.eq("campus_id", campusId);
+
   let privateLessonTodayQ = supabase
     .from("private_lessons")
     .select("amount_paid, teacher_amount, lesson_date, campus_id")
@@ -297,6 +304,7 @@ export default async function DashboardPage() {
     teacherPayMonthRes,
     privateLessonMonthRes,
     privateLessonTodayRes,
+    privateLessonDueTodayRes,
     teacherPayTrendRes,
     { data: studentRows },
     { data: campuses },
@@ -321,6 +329,7 @@ export default async function DashboardPage() {
     teacherPayMonthQ,
     privateLessonMonthQ,
     privateLessonTodayQ,
+    privateLessonDueTodayQ,
     teacherPayTrendQ,
     studentRowsQ,
     campusesQ,
@@ -433,6 +442,7 @@ export default async function DashboardPage() {
       s + (Number(r.amount_paid || 0) - Number(r.teacher_amount || 0)),
     0
   );
+  const privateLessonDueTodayCount = (privateLessonDueTodayRes?.data || []).length;
   const privateLessonMonthProfit = (privateLessonMonthRes?.data || []).reduce(
     (s: number, r: any) =>
       s + (Number(r.amount_paid || 0) - Number(r.teacher_amount || 0)),
@@ -913,6 +923,11 @@ export default async function DashboardPage() {
               </p>
               <p className="text-xs text-gray-500 mt-1">
                 Today {formatCurrency(privateLessonTodayProfit)}
+                {privateLessonDueTodayCount > 0 && (
+                  <span className="block text-amber-700 font-medium mt-0.5">
+                    {privateLessonDueTodayCount} due today
+                  </span>
+                )}
               </p>
               <Link
                 href="/private-lessons"

@@ -3,10 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Plus, X } from "lucide-react";
+import { Plus, X, Trash2 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 
 type Campus = { id: string; name: string; short_name?: string | null };
+type TeacherRow = { name: string; amount: string };
 
 export function PrivateLessonForm({
   campuses,
@@ -17,13 +18,14 @@ export function PrivateLessonForm({
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [teachers, setTeachers] = useState<TeacherRow[]>([
+    { name: "", amount: "" },
+  ]);
   const [form, setForm] = useState({
     parent_name: "",
     parent_phone: "",
     student_name: "",
     amount_paid: "",
-    teacher_name: "",
-    teacher_amount: "",
     lesson_date: new Date().toISOString().slice(0, 10),
     due_date: "",
     notes: "",
@@ -33,28 +35,43 @@ export function PrivateLessonForm({
   const supabase = createClient();
 
   const paid = Number(form.amount_paid || 0);
-  const teacherPay = Number(form.teacher_amount || 0);
-  const profit = paid - teacherPay;
+  const teacherTotal = teachers.reduce(
+    (s, t) => s + (Number(t.amount) || 0),
+    0
+  );
+  const profit = paid - teacherTotal;
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.parent_name.trim() || !form.teacher_name.trim()) {
-      alert("Parent name and teacher name are required.");
+    if (!form.parent_name.trim()) {
+      alert("Parent name is required.");
       return;
     }
-    if (paid < 0 || teacherPay < 0) {
-      alert("Amounts cannot be negative.");
+    const cleanTeachers = teachers
+      .map((t) => ({
+        name: t.name.trim(),
+        amount: Number(t.amount) || 0,
+      }))
+      .filter((t) => t.name);
+    if (cleanTeachers.length === 0) {
+      alert("Add at least one teacher and their pay.");
+      return;
+    }
+    if (paid < 0) {
+      alert("Amount paid cannot be negative.");
       return;
     }
     setLoading(true);
     const { data: userData } = await supabase.auth.getUser();
+    const teacherSum = cleanTeachers.reduce((s, t) => s + t.amount, 0);
     const { error } = await supabase.from("private_lessons").insert({
       parent_name: form.parent_name.trim(),
       parent_phone: form.parent_phone || null,
       student_name: form.student_name || null,
       amount_paid: paid,
-      teacher_name: form.teacher_name.trim(),
-      teacher_amount: teacherPay,
+      teacher_name: cleanTeachers.map((t) => t.name).join(", "),
+      teacher_amount: teacherSum,
+      teachers: cleanTeachers,
       lesson_date: form.lesson_date,
       due_date: form.due_date || null,
       notes: form.notes || null,
@@ -67,13 +84,12 @@ export function PrivateLessonForm({
       return;
     }
     setOpen(false);
+    setTeachers([{ name: "", amount: "" }]);
     setForm({
       parent_name: "",
       parent_phone: "",
       student_name: "",
       amount_paid: "",
-      teacher_name: "",
-      teacher_amount: "",
       lesson_date: new Date().toISOString().slice(0, 10),
       due_date: "",
       notes: "",
@@ -96,7 +112,7 @@ export function PrivateLessonForm({
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-5 py-4 border-b sticky top-0 bg-white">
+            <div className="flex items-center justify-between px-5 py-4 border-b sticky top-0 bg-white z-10">
               <h2 className="text-lg font-semibold">Private lesson</h2>
               <button type="button" onClick={() => setOpen(false)}>
                 <X className="w-5 h-5 text-gray-500" />
@@ -161,7 +177,7 @@ export function PrivateLessonForm({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium mb-1">
-                    Amount paid *
+                    Amount paid by parent *
                   </label>
                   <input
                     type="number"
@@ -188,7 +204,9 @@ export function PrivateLessonForm({
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Due date</label>
+                <label className="block text-sm font-medium mb-1">
+                  Due date (next payment / end)
+                </label>
                 <input
                   type="date"
                   value={form.due_date}
@@ -198,34 +216,66 @@ export function PrivateLessonForm({
                   className="w-full border rounded-lg px-3 py-2 text-sm"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Teacher *
-                </label>
-                <input
-                  required
-                  value={form.teacher_name}
-                  onChange={(e) =>
-                    setForm({ ...form, teacher_name: e.target.value })
-                  }
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                />
+
+              <div className="border rounded-lg p-3 bg-gray-50 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium">
+                    Teachers (can add more than one)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setTeachers([...teachers, { name: "", amount: "" }])
+                    }
+                    className="text-xs text-brand-green font-medium hover:underline"
+                  >
+                    + Add teacher
+                  </button>
+                </div>
+                {teachers.map((t, i) => (
+                  <div key={i} className="flex gap-2 items-start">
+                    <input
+                      required
+                      value={t.name}
+                      onChange={(e) => {
+                        const next = [...teachers];
+                        next[i] = { ...next[i], name: e.target.value };
+                        setTeachers(next);
+                      }}
+                      placeholder="Teacher name"
+                      className="flex-1 border rounded-lg px-2 py-1.5 text-sm"
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      required
+                      value={t.amount}
+                      onChange={(e) => {
+                        const next = [...teachers];
+                        next[i] = { ...next[i], amount: e.target.value };
+                        setTeachers(next);
+                      }}
+                      placeholder="Pay ₦"
+                      className="w-24 border rounded-lg px-2 py-1.5 text-sm"
+                    />
+                    {teachers.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setTeachers(teachers.filter((_, j) => j !== i))
+                        }
+                        className="p-1.5 text-red-600"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <p className="text-xs text-gray-500">
+                  Total to teachers: {formatCurrency(teacherTotal)}
+                </p>
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Amount to teacher *
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  required
-                  value={form.teacher_amount}
-                  onChange={(e) =>
-                    setForm({ ...form, teacher_amount: e.target.value })
-                  }
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                />
-              </div>
+
               <div className="bg-green-50 border border-green-100 rounded-lg px-3 py-2 text-sm">
                 School profit:{" "}
                 <span className="font-bold text-green-800">
