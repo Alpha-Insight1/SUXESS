@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/utils";
 import { getCurrentProfile, campusFilter, isAdmin } from "@/lib/auth";
 import Link from "next/link";
+import { RenewCardButton } from "@/components/renewals/renew-card-button";
 
 function isoToday() {
   return new Date().toISOString().slice(0, 10);
@@ -139,6 +140,7 @@ export default async function RenewalsPage() {
               <th className="text-left px-3 py-2 font-medium">Status</th>
               <th className="text-left px-3 py-2 font-medium">Paid / Fee</th>
               <th className="text-left px-3 py-2 font-medium">Parent</th>
+              <th className="text-left px-3 py-2 font-medium">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y">
@@ -201,6 +203,12 @@ export default async function RenewalsPage() {
                   </td>
                   <td className="px-3 py-2 text-xs">
                     {st?.parent_phone || "—"}
+                  </td>
+                  <td className="px-3 py-2">
+                    <RenewCardButton
+                      feeId={r.id}
+                      studentName={st?.full_name || "Student"}
+                    />
                   </td>
                 </tr>
               );

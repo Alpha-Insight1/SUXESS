@@ -172,6 +172,20 @@ export default async function DashboardPage() {
     .lte("payment_date", monthEnd);
   if (campusId) teacherPayMonthQ = teacherPayMonthQ.eq("campus_id", campusId);
 
+
+  let privateLessonMonthQ = supabase
+    .from("private_lessons")
+    .select("amount_paid, teacher_amount, lesson_date, campus_id")
+    .gte("lesson_date", monthStart)
+    .lte("lesson_date", monthEnd);
+  if (campusId) privateLessonMonthQ = privateLessonMonthQ.eq("campus_id", campusId);
+
+  let privateLessonTodayQ = supabase
+    .from("private_lessons")
+    .select("amount_paid, teacher_amount, lesson_date, campus_id")
+    .eq("lesson_date", today);
+  if (campusId) privateLessonTodayQ = privateLessonTodayQ.eq("campus_id", campusId);
+
   let teacherPayTrendQ = supabase
     .from("teacher_payments")
     .select("amount, campus_id, payment_date")
@@ -281,6 +295,8 @@ export default async function DashboardPage() {
     { data: todayExpenses },
     teacherPayTodayRes,
     teacherPayMonthRes,
+    privateLessonMonthRes,
+    privateLessonTodayRes,
     teacherPayTrendRes,
     { data: studentRows },
     { data: campuses },
@@ -303,6 +319,8 @@ export default async function DashboardPage() {
     expTodayQ,
     teacherPayTodayQ,
     teacherPayMonthQ,
+    privateLessonMonthQ,
+    privateLessonTodayQ,
     teacherPayTrendQ,
     studentRowsQ,
     campusesQ,
@@ -409,6 +427,18 @@ export default async function DashboardPage() {
     (s: number, r: any) => s + Number(r.amount || 0),
     0
   );
+
+  const privateLessonTodayProfit = (privateLessonTodayRes?.data || []).reduce(
+    (s: number, r: any) =>
+      s + (Number(r.amount_paid || 0) - Number(r.teacher_amount || 0)),
+    0
+  );
+  const privateLessonMonthProfit = (privateLessonMonthRes?.data || []).reduce(
+    (s: number, r: any) =>
+      s + (Number(r.amount_paid || 0) - Number(r.teacher_amount || 0)),
+    0
+  );
+
   const teacherPayMonthAmt = (teacherPayMonthRes?.data || []).reduce(
     (s: number, r: any) => s + Number(r.amount || 0),
     0
@@ -462,13 +492,14 @@ export default async function DashboardPage() {
   }, 0);
 
   const profitToday =
-    incomeToday - expensesTodayAmt - teacherPayTodayAmt + inventoryProfitToday;
+    incomeToday - expensesTodayAmt - teacherPayTodayAmt + inventoryProfitToday + privateLessonTodayProfit;
   const profitMonth =
     totalIncomeMonth -
     totalExpensesMonth -
     totalPayroll -
     teacherPayMonthAmt +
-    inventoryProfitMonth;
+    inventoryProfitMonth +
+    privateLessonMonthProfit;
 
   // Per-campus snapshot
   type CampSnap = {
@@ -872,6 +903,25 @@ export default async function DashboardPage() {
                 Open Teacher daily pay →
               </Link>
             </div>
+
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+              <div className="flex items-center gap-2 text-gray-500 text-sm">
+                Private lesson profit (month)
+              </div>
+              <p className="text-2xl font-bold text-green-700 mt-2">
+                {formatCurrency(privateLessonMonthProfit)}
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                Today {formatCurrency(privateLessonTodayProfit)}
+              </p>
+              <Link
+                href="/private-lessons"
+                className="text-sm text-brand-green font-medium mt-2 inline-block hover:underline"
+              >
+                Private lessons →
+              </Link>
+            </div>
+
           </div>
 
           {/* Three branch cards */}

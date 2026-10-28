@@ -1,14 +1,23 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import Link from "next/link";
 
 type CampusOption = {
   id: string;
   name: string;
   short_name?: string | null;
+};
+
+type ExistingStudent = {
+  id: string;
+  full_name: string;
+  admission_number: string;
+  class_name?: string | null;
+  campus_id?: string | null;
 };
 
 const EXAM_OPTIONS = [
@@ -22,104 +31,86 @@ const EXAM_OPTIONS = [
   "Other",
 ];
 
+const SCHOOL_CLASSES = [
+  "Nursery 1",
+  "Nursery 2",
+  "KG 1",
+  "KG 2",
+  "Primary 1",
+  "Primary 2",
+  "Primary 3",
+  "Primary 4",
+  "Primary 5",
+  "Primary 6",
+  "JSS 1",
+  "JSS 2",
+  "JSS 3",
+  "SS 1",
+  "SS 2",
+  "SS 3",
+];
+
 function isTutorialCampus(c?: CampusOption | null) {
   if (!c) return false;
   const s = `${c.short_name || ""} ${c.name || ""}`.toLowerCase();
   return s.includes("arepo") || s.includes("ofada") || s.includes("mowe");
 }
 
-function campusPrefix(c?: CampusOption | null) {
-  if (!c) return "STU";
-  const raw = (c.short_name || c.name || "STU").toUpperCase().replace(/[^A-Z0-9]/g, "");
-  return raw.slice(0, 8) || "STU";
-}
-
-/** Next number for this campus: PREFIX-001, PREFIX-002, ... */
-async function nextAdmissionNumber(
-  supabase: ReturnType<typeof createClient>,
-  campusId: string,
-  campus: CampusOption | undefined
-): Promise<string> {
-  const prefix = campusPrefix(campus);
-  const { data } = await supabase
-    .from("students")
-    .select("admission_number")
-    .eq("campus_id", campusId)
-    .like("admission_number", `${prefix}-%`);
-
-  let max = 0;
-  for (const row of data || []) {
-    const m = String(row.admission_number || "").match(/-(\d+)$/);
-    if (m) max = Math.max(max, parseInt(m[1], 10));
-  }
-  const next = max + 1;
-  return `${prefix}-${String(next).padStart(3, "0")}`;
-}
-
 export function AddStudentButton({ campuses }: { campuses: CampusOption[] }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [selectedExams, setSelectedExams] = useState<string[]>([]);
+  const [existing, setExisting] = useState<ExistingStudent[]>([]);
+  const [classMode, setClassMode] = useState<"pick" | "type">("pick");
+  const defaultCampusId = campuses[0]?.id || "";
   const [form, setForm] = useState({
+    campus_id: defaultCampusId,
     full_name: "",
     class_name: "",
-    campus_id: campuses[0]?.id || "",
     parent_name: "",
     parent_phone: "",
     parent_email: "",
-    exam_preparing_for: "", // legacy single; multi in selectedExams
+    exam_preparing_for: "",
     address: "",
     department: "",
   });
   const router = useRouter();
   const supabase = createClient();
 
-  const selectedCampus = useMemo(
-    () => campuses.find((c) => c.id === form.campus_id),
-    [campuses, form.campus_id]
-  );
+  const selectedCampus = campuses.find((c) => c.id === form.campus_id);
   const showExam = isTutorialCampus(selectedCampus);
-  const previewPrefix = campusPrefix(selectedCampus);
 
-  const reset = () =>
-    setForm({
-      full_name: "",
-      class_name: "",
-      campus_id: campuses[0]?.id || "",
-      parent_name: "",
-      parent_phone: "",
-      parent_email: "",
-      exam_preparing_for: "",
-      address: "",
-      department: "",
-    });
+  useEffect(() => {
+    if (!open) return;
+    (async () => {
+      const { data } = await supabase
+        .from("students")
+        .select("id, full_name, admission_number, class_name, campus_id")
+        .order("full_name")
+        .limit(2000);
+      setExisting((data as ExistingStudent[]) || []);
+    })();
+  }, [open, supabase]);
+
+  const nameMatches = useMemo(() => {
+    const q = form.full_name.trim().toLowerCase();
+    if (q.length < 2) return [];
+    return existing
+      .filter((s) => s.full_name?.toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [form.full_name, existing]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.campus_id) {
-      alert("Select a campus");
+    if (!form.campus_id || !form.full_name.trim()) {
+      alert("Campus and student name are required.");
       return;
     }
     setLoading(true);
-
-    let admission_number: string;
-    try {
-      admission_number = await nextAdmissionNumber(
-        supabase,
-        form.campus_id,
-        selectedCampus
-      );
-    } catch {
-      setLoading(false);
-      alert("Could not generate student number. Try again.");
-      return;
-    }
-
-    const payload: Record<string, unknown> = {
-      admission_number,
-      full_name: form.full_name,
+    const payload: any = {
+      campus_id: form.campus_id,
+      full_name: form.full_name.trim(),
       class_name: form.class_name || (showExam ? "Tutorial" : "—"),
-      campus_id: form.campus_id || null,
       parent_name: form.parent_name || null,
       parent_phone: form.parent_phone || null,
       parent_email: form.parent_email || null,
@@ -130,26 +121,37 @@ export function AddStudentButton({ campuses }: { campuses: CampusOption[] }) {
         : null,
       address: form.address || null,
       department: form.department || null,
+      status: "active",
     };
 
     const { error } = await supabase.from("students").insert(payload);
-
     setLoading(false);
     if (error) {
       alert(error.message);
       return;
     }
-
+    setForm({
+      campus_id: defaultCampusId,
+      full_name: "",
+      class_name: "",
+      parent_name: "",
+      parent_phone: "",
+      parent_email: "",
+      exam_preparing_for: "",
+      address: "",
+      department: "",
+    });
+    setSelectedExams([]);
     setOpen(false);
-    reset();
     router.refresh();
   };
 
   return (
     <>
       <button
+        type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-2 bg-brand-green hover:bg-brand-dark text-white px-4 py-2.5 rounded-lg text-sm font-medium transition"
+        className="inline-flex items-center gap-2 px-4 py-2.5 bg-brand-green text-white text-sm font-medium rounded-lg hover:bg-brand-dark transition"
       >
         <Plus className="w-4 h-4" />
         Add student
@@ -157,20 +159,14 @@ export function AddStudentButton({ campuses }: { campuses: CampusOption[] }) {
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between px-6 py-4 border-b">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b sticky top-0 bg-white">
               <h2 className="text-lg font-semibold">Register student</h2>
               <button type="button" onClick={() => setOpen(false)}>
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm text-green-900">
-                Student number will be assigned automatically:{" "}
-                <strong>{previewPrefix}-001</strong>,{" "}
-                <strong>{previewPrefix}-002</strong>, … for this branch
-              </div>
-
               {campuses.length > 1 && (
                 <div>
                   <label className="block text-sm font-medium mb-1">
@@ -204,7 +200,34 @@ export function AddStudentButton({ campuses }: { campuses: CampusOption[] }) {
                     setForm({ ...form, full_name: e.target.value })
                   }
                   className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-green"
+                  placeholder="Student full name"
+                  autoComplete="off"
                 />
+                {nameMatches.length > 0 && (
+                  <div className="mt-2 border border-amber-200 bg-amber-50 rounded-lg p-2 text-sm">
+                    <p className="text-xs font-medium text-amber-900 mb-1">
+                      Similar names already registered — open profile instead
+                      of creating a duplicate:
+                    </p>
+                    <ul className="space-y-1">
+                      {nameMatches.map((s) => (
+                        <li key={s.id}>
+                          <Link
+                            href={`/students/${s.id}`}
+                            className="text-brand-green font-medium hover:underline"
+                            onClick={() => setOpen(false)}
+                          >
+                            {s.full_name}
+                          </Link>
+                          <span className="text-gray-500 text-xs ml-1">
+                            ({s.admission_number}
+                            {s.class_name ? ` · ${s.class_name}` : ""})
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
 
               {!showExam && (
@@ -212,15 +235,57 @@ export function AddStudentButton({ campuses }: { campuses: CampusOption[] }) {
                   <label className="block text-sm font-medium mb-1">
                     Class *
                   </label>
-                  <input
-                    required
-                    value={form.class_name}
-                    onChange={(e) =>
-                      setForm({ ...form, class_name: e.target.value })
-                    }
-                    className="w-full border rounded-lg px-3 py-2 text-sm"
-                    placeholder="e.g. SS1, Primary 3"
-                  />
+                  <div className="flex gap-2 mb-2">
+                    <button
+                      type="button"
+                      onClick={() => setClassMode("pick")}
+                      className={`text-xs px-2 py-1 rounded border ${
+                        classMode === "pick"
+                          ? "bg-brand-green text-white border-brand-green"
+                          : "bg-white text-gray-600"
+                      }`}
+                    >
+                      Pick list
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setClassMode("type")}
+                      className={`text-xs px-2 py-1 rounded border ${
+                        classMode === "type"
+                          ? "bg-brand-green text-white border-brand-green"
+                          : "bg-white text-gray-600"
+                      }`}
+                    >
+                      Type class
+                    </button>
+                  </div>
+                  {classMode === "pick" ? (
+                    <select
+                      required
+                      value={form.class_name}
+                      onChange={(e) =>
+                        setForm({ ...form, class_name: e.target.value })
+                      }
+                      className="w-full border rounded-lg px-3 py-2 text-sm"
+                    >
+                      <option value="">Select class…</option>
+                      {SCHOOL_CLASSES.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      required
+                      value={form.class_name}
+                      onChange={(e) =>
+                        setForm({ ...form, class_name: e.target.value })
+                      }
+                      className="w-full border rounded-lg px-3 py-2 text-sm"
+                      placeholder="e.g. SS2 Science, Creche"
+                    />
+                  )}
                 </div>
               )}
 
@@ -253,11 +318,6 @@ export function AddStudentButton({ campuses }: { campuses: CampusOption[] }) {
                       );
                     })}
                   </div>
-                  {selectedExams.length > 0 && (
-                    <p className="text-xs text-gray-500 mt-1">
-                      Selected: {selectedExams.join(", ")}
-                    </p>
-                  )}
                 </div>
               )}
 
@@ -299,31 +359,30 @@ export function AddStudentButton({ campuses }: { campuses: CampusOption[] }) {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">
-                  Address
-                </label>
+                <label className="block text-sm font-medium mb-1">Address</label>
                 <input
                   value={form.address}
                   onChange={(e) =>
                     setForm({ ...form, address: e.target.value })
                   }
                   className="w-full border rounded-lg px-3 py-2 text-sm"
-                  placeholder="Home / contact address"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Department
-                </label>
-                <input
-                  value={form.department}
-                  onChange={(e) =>
-                    setForm({ ...form, department: e.target.value })
-                  }
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                  placeholder="e.g. Science, Arts, Commercial"
-                />
-              </div>
+              {!showExam && (
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Department
+                  </label>
+                  <input
+                    value={form.department}
+                    onChange={(e) =>
+                      setForm({ ...form, department: e.target.value })
+                    }
+                    className="w-full border rounded-lg px-3 py-2 text-sm"
+                    placeholder="e.g. Science, Arts"
+                  />
+                </div>
+              )}
 
               <button
                 type="submit"
