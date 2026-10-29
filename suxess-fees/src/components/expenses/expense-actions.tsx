@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Pencil, Trash2, X } from "lucide-react";
 import { MoneyInput, formatMoneyInput } from "@/components/ui/money-input";
+import { ConfirmDialog, MessageDialog } from "@/components/ui/confirm-dialog";
 
 const CATEGORIES = [
   "Utilities",
@@ -34,6 +35,8 @@ export function ExpenseActions({
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [form, setForm] = useState({
     expense_date: String(expense.expense_date || "").slice(0, 10),
     category: expense.category || "Other",
@@ -74,15 +77,15 @@ export function ExpenseActions({
   };
 
   const remove = async () => {
-    if (!confirm("Delete this expense? This cannot be undone.")) return;
     setLoading(true);
     const { error } = await supabase
       .from("expenses")
       .delete()
       .eq("id", expense.id);
     setLoading(false);
+    setConfirmDelete(false);
     if (error) {
-      alert(error.message);
+      setErrorMsg(error.message);
       return;
     }
     router.refresh();
@@ -101,7 +104,7 @@ export function ExpenseActions({
         </button>
         <button
           type="button"
-          onClick={remove}
+          onClick={() => setConfirmDelete(true)}
           disabled={loading}
           className="text-xs font-medium text-red-600 hover:underline inline-flex items-center gap-0.5 disabled:opacity-50"
         >
@@ -212,6 +215,23 @@ export function ExpenseActions({
           </div>
         </div>
       )}
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Delete this expense?"
+        message="This cannot be undone. The amount will no longer count in money out or monthly statistics."
+        confirmLabel="Delete expense"
+        cancelLabel="Keep"
+        variant="danger"
+        loading={loading}
+        onConfirm={remove}
+        onCancel={() => setConfirmDelete(false)}
+      />
+      <MessageDialog
+        open={!!errorMsg}
+        title="Could not delete"
+        message={errorMsg || ""}
+        onClose={() => setErrorMsg(null)}
+      />
     </>
   );
 }

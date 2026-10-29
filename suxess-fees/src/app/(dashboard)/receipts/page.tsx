@@ -10,9 +10,10 @@ import { ExportReceipts } from "@/components/receipts/export-receipts";
 export default async function ReceiptsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ receipt?: string; show?: string }>;
+  searchParams: Promise<{ receipt?: string; show?: string; q?: string }>;
 }) {
   const params = await searchParams;
+  const q = (params.q || "").trim();
   const supabase = await createClient();
   const profile = await getCurrentProfile();
   const campusId = campusFilter(profile);
@@ -25,7 +26,7 @@ export default async function ReceiptsPage({
        student_fees(session, term, amount, amount_paid, balance, fee_types(name))`
     )
     .order("created_at", { ascending: false })
-    .limit(50);
+    .limit(500);
 
   if (showVoided) {
     query = query.not("deleted_at", "is", null);
@@ -36,10 +37,22 @@ export default async function ReceiptsPage({
     query = query.eq("students.campus_id", campusId);
   }
 
-  const { data: payments } = await query;
+  const { data: paymentsRaw } = await query;
+
+  const payments = (paymentsRaw || []).filter((p: any) => {
+    if (!q) return true;
+    const qq = q.toLowerCase();
+    const st = Array.isArray(p.students) ? p.students[0] : p.students;
+    return (
+      String(p.receipt_number || "").toLowerCase().includes(qq) ||
+      String(st?.full_name || "").toLowerCase().includes(qq) ||
+      String(st?.admission_number || "").toLowerCase().includes(qq) ||
+      String(st?.parent_phone || "").toLowerCase().includes(qq)
+    );
+  });
 
   const selected = params.receipt
-    ? payments?.find((p: any) => p.receipt_number === params.receipt)
+    ? payments.find((p: any) => p.receipt_number === params.receipt)
     : null;
 
   return (
@@ -55,7 +68,7 @@ export default async function ReceiptsPage({
           </p>
         </div>
         <div className="flex flex-wrap gap-2 items-center">
-          <ExportReceipts payments={payments || []} />
+          <ExportReceipts payments={payments} />
           <Link
             href="/receipts"
             className={`px-3 py-1.5 rounded-lg text-sm font-medium border ${
@@ -78,6 +91,32 @@ export default async function ReceiptsPage({
           </Link>
         </div>
       </div>
+
+
+      <form className="mb-4 flex flex-col sm:flex-row gap-2" action="/receipts" method="get">
+        {showVoided && <input type="hidden" name="show" value="voided" />}
+        <input
+          type="search"
+          name="q"
+          defaultValue={q}
+          placeholder="Search receipt no, student name, admission no, phone…"
+          className="flex-1 border border-gray-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-green"
+        />
+        <button
+          type="submit"
+          className="px-4 py-2.5 bg-brand-green text-white text-sm font-medium rounded-lg hover:bg-brand-dark"
+        >
+          Search
+        </button>
+        {q && (
+          <Link
+            href={showVoided ? "/receipts?show=voided" : "/receipts"}
+            className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 text-center"
+          >
+            Clear
+          </Link>
+        )}
+      </form>
 
       {selected && (
         <div className="mb-6">
@@ -166,6 +205,13 @@ export default async function ReceiptsPage({
                           <PaymentActions
                             paymentId={p.id}
                             deletedAt={p.deleted_at}
+                            amount={Number(p.amount || 0)}
+                            studentName={
+                              (Array.isArray(p.students)
+                                ? p.students[0]
+                                : p.students
+                              )?.full_name
+                            }
                           />
                         </div>
                       </div>

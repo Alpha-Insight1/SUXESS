@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatCurrency } from "@/lib/utils";
+import { ConfirmDialog, MessageDialog } from "@/components/ui/confirm-dialog";
 
 /**
  * Director only: approve pending scholarship.
@@ -26,6 +27,9 @@ export function ApproveScholarshipButton({
   studentName: string;
 }) {
   const [loading, setLoading] = useState(false);
+  const [confirmApprove, setConfirmApprove] = useState(false);
+  const [confirmReject, setConfirmReject] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const router = useRouter();
   const supabase = createClient();
 
@@ -34,15 +38,6 @@ export function ApproveScholarshipButton({
   );
 
   const approve = async () => {
-    if (
-      !confirm(
-        `Approve scholarship for ${studentName}?\n\n` +
-          `This will subtract ${formatCurrency(offset)} from school income ` +
-          `(scholarship offset for ${scholarship.session} · ${scholarship.term}).`
-      )
-    ) {
-      return;
-    }
     setLoading(true);
     const { data: userData } = await supabase.auth.getUser();
 
@@ -70,7 +65,8 @@ export function ApproveScholarshipButton({
         });
         if (expErr) {
           setLoading(false);
-          alert("Could not record income offset: " + expErr.message);
+          setConfirmApprove(false);
+          setErrorMsg("Could not record income offset: " + expErr.message);
           return;
         }
       }
@@ -88,9 +84,11 @@ export function ApproveScholarshipButton({
 
     if (error) {
       setLoading(false);
-      alert(error.message);
+      setConfirmApprove(false);
+      setErrorMsg(error.message);
       return;
     }
+    setConfirmApprove(false);
 
     // Mark related notifications read
     await supabase
@@ -103,7 +101,6 @@ export function ApproveScholarshipButton({
   };
 
   const reject = async () => {
-    if (!confirm("Cancel this pending scholarship?")) return;
     setLoading(true);
     const { error } = await supabase
       .from("scholarships")
@@ -117,28 +114,63 @@ export function ApproveScholarshipButton({
       .update({ read_at: new Date().toISOString() })
       .eq("related_scholarship_id", scholarship.id);
     setLoading(false);
-    if (error) alert(error.message);
+    setConfirmReject(false);
+    if (error) setErrorMsg(error.message);
     else router.refresh();
   };
 
   return (
-    <div className="flex flex-wrap gap-2">
-      <button
-        type="button"
-        disabled={loading}
-        onClick={approve}
-        className="text-xs font-semibold px-2.5 py-1 rounded-md bg-brand-green text-white hover:bg-brand-dark disabled:opacity-50"
-      >
-        Approve (−{formatCurrency(offset)})
-      </button>
-      <button
-        type="button"
-        disabled={loading}
-        onClick={reject}
-        className="text-xs font-medium text-red-600 hover:underline disabled:opacity-50"
-      >
-        Cancel
-      </button>
-    </div>
+    <>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={loading}
+          onClick={() => setConfirmApprove(true)}
+          className="text-xs font-semibold px-2.5 py-1 rounded-md bg-brand-green text-white hover:bg-brand-dark disabled:opacity-50"
+        >
+          Approve (−{formatCurrency(offset)})
+        </button>
+        <button
+          type="button"
+          disabled={loading}
+          onClick={() => setConfirmReject(true)}
+          className="text-xs font-medium text-red-600 hover:underline disabled:opacity-50"
+        >
+          Cancel
+        </button>
+      </div>
+      <ConfirmDialog
+        open={confirmApprove}
+        title={`Approve scholarship for ${studentName}?`}
+        message={
+          `This will subtract ${formatCurrency(offset)} from school income ` +
+          `(scholarship offset for ${scholarship.session} · ${scholarship.term}).\n\n` +
+          `The student will show as on scholarship on the fees tracker and profile.`
+        }
+        confirmLabel="Approve & subtract"
+        cancelLabel="Not now"
+        variant="success"
+        loading={loading}
+        onConfirm={approve}
+        onCancel={() => setConfirmApprove(false)}
+      />
+      <ConfirmDialog
+        open={confirmReject}
+        title="Cancel pending scholarship?"
+        message={`${studentName} will not receive this scholarship. You can grant again later if needed.`}
+        confirmLabel="Cancel scholarship"
+        cancelLabel="Keep pending"
+        variant="danger"
+        loading={loading}
+        onConfirm={reject}
+        onCancel={() => setConfirmReject(false)}
+      />
+      <MessageDialog
+        open={!!errorMsg}
+        title="Could not complete"
+        message={errorMsg || ""}
+        onClose={() => setErrorMsg(null)}
+      />
+    </>
   );
 }
