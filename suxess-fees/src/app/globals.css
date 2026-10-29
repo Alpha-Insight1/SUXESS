@@ -50,22 +50,36 @@ html {
 /* Director privacy mode — hide money in public */
 body.privacy-mode [data-privacy="money"],
 body.privacy-mode .privacy-amount {
-  filter: blur(9px);
+  filter: blur(10px);
   user-select: none;
   transition: filter 0.15s ease;
 }
 
-/* Also blur large KPI figures and green/red money emphasis under admin shell */
+/* Blur monetary figures across the director dashboard */
 body.privacy-mode #admin-privacy-root .text-2xl,
 body.privacy-mode #admin-privacy-root .text-3xl,
+body.privacy-mode #admin-privacy-root .text-lg.font-bold,
 body.privacy-mode #admin-privacy-root .text-xl.font-bold,
-body.privacy-mode #admin-privacy-root .font-bold.text-green-700,
-body.privacy-mode #admin-privacy-root .font-bold.text-red-700,
-body.privacy-mode #admin-privacy-root .font-semibold.text-green-700,
-body.privacy-mode #admin-privacy-root .font-semibold.text-red-700,
-body.privacy-mode #admin-privacy-root .text-green-700.font-semibold,
+body.privacy-mode #admin-privacy-root td.text-right,
+body.privacy-mode #admin-privacy-root .font-bold,
+body.privacy-mode #admin-privacy-root .font-semibold,
+body.privacy-mode #admin-privacy-root .text-green-700,
+body.privacy-mode #admin-privacy-root .text-green-800,
 body.privacy-mode #admin-privacy-root .text-red-600,
-body.privacy-mode #admin-privacy-root .text-red-700 {
-  filter: blur(9px);
+body.privacy-mode #admin-privacy-root .text-red-700,
+body.privacy-mode #admin-privacy-root .text-red-800,
+body.privacy-mode #admin-privacy-root .text-amber-900,
+body.privacy-mode #admin-privacy-root .text-blue-900,
+body.privacy-mode #admin-privacy-root span.font-medium {
+  filter: blur(10px);
   user-select: none;
+}
+
+/* Keep labels readable */
+body.privacy-mode #admin-privacy-root h2,
+body.privacy-mode #admin-privacy-root h3,
+body.privacy-mode #admin-privacy-root p.text-xs,
+body.privacy-mode #admin-privacy-root p.text-sm:not(.font-bold),
+body.privacy-mode #admin-privacy-root a {
+  filter: none !important;
 }

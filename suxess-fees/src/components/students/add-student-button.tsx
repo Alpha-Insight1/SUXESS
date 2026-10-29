@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Plus, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
+import { MessageDialog } from "@/components/ui/confirm-dialog";
 
 type CampusOption = {
   id: string;
@@ -61,6 +62,7 @@ export function AddStudentButton({ campuses }: { campuses: CampusOption[] }) {
   const [loading, setLoading] = useState(false);
   const [selectedExams, setSelectedExams] = useState<string[]>([]);
   const [existing, setExisting] = useState<ExistingStudent[]>([]);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [classMode, setClassMode] = useState<"pick" | "type">("pick");
   const defaultCampusId = campuses[0]?.id || "";
   const [form, setForm] = useState({
@@ -107,8 +109,34 @@ export function AddStudentButton({ campuses }: { campuses: CampusOption[] }) {
       return;
     }
     setLoading(true);
+
+    // Auto admission number per campus (e.g. SUXESSAR-027)
+    const campus = campuses.find((c) => c.id === form.campus_id);
+    const prefix = (
+      campus?.short_name ||
+      campus?.name?.replace(/\s+/g, "").slice(0, 8) ||
+      "SUXESS"
+    )
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .slice(0, 12);
+
+    const { data: existingNums } = await supabase
+      .from("students")
+      .select("admission_number")
+      .eq("campus_id", form.campus_id)
+      .ilike("admission_number", `${prefix}-%`);
+
+    let maxN = 0;
+    for (const row of existingNums || []) {
+      const m = String(row.admission_number || "").match(/-(\d+)$/);
+      if (m) maxN = Math.max(maxN, parseInt(m[1], 10));
+    }
+    const admission_number = `${prefix}-${String(maxN + 1).padStart(3, "0")}`;
+
     const payload: any = {
       campus_id: form.campus_id,
+      admission_number,
       full_name: form.full_name.trim(),
       class_name: form.class_name || (showExam ? "Tutorial" : "—"),
       parent_name: form.parent_name || null,
@@ -127,7 +155,7 @@ export function AddStudentButton({ campuses }: { campuses: CampusOption[] }) {
     const { error } = await supabase.from("students").insert(payload);
     setLoading(false);
     if (error) {
-      alert(error.message);
+      setErrorMsg(error.message);
       return;
     }
     setForm({
@@ -395,6 +423,12 @@ export function AddStudentButton({ campuses }: { campuses: CampusOption[] }) {
           </div>
         </div>
       )}
+      <MessageDialog
+        open={!!errorMsg}
+        title="Could not register student"
+        message={errorMsg || ""}
+        onClose={() => setErrorMsg(null)}
+      />
     </>
   );
 }

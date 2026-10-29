@@ -205,13 +205,15 @@ export default async function RenewalsPage() {
                     {st?.parent_phone || "—"}
                   </td>
                   <td className="px-3 py-2">
-                    <RenewCardButton
-                      feeId={r.id}
-                      studentId={st?.id}
-                      studentName={st?.full_name || "Student"}
-                      feeAmount={Number(r.amount || 0)}
-                      amountPaidSoFar={Number(r.amount_paid || 0)}
-                    />
+                    {st?.id ? (
+                      <RenewCardButton
+                        feeId={r.id}
+                        studentId={st.id}
+                        studentName={st.full_name || "Student"}
+                        feeAmount={Number(r.amount || 0)}
+                        amountPaidSoFar={Number(r.amount_paid || 0)}
+                      />
+                    ) : null}
                   </td>
                 </tr>
               );

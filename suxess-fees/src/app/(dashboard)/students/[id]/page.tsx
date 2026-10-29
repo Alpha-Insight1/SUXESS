@@ -7,6 +7,7 @@ import { RecordPaymentForm } from "@/components/payments/record-payment-form";
 import { EditStudentButton } from "@/components/students/edit-student-button";
 import { StudentStatusActions } from "@/components/students/student-status-actions";
 import { ArrowLeft } from "lucide-react";
+import { RemoveFeeButton } from "@/components/students/remove-fee-button";
 
 export default async function StudentProfilePage({
   params,
@@ -243,13 +244,14 @@ export default async function StudentProfilePage({
                     <th className="text-right px-4 py-2 font-medium">Paid</th>
                     <th className="text-right px-4 py-2 font-medium">Balance</th>
                     <th className="text-left px-4 py-2 font-medium">Notes</th>
+                    <th className="text-left px-4 py-2 font-medium">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
                   {(fees || []).length === 0 ? (
                     <tr>
                       <td
-                        colSpan={4}
+                        colSpan={5}
                         className="px-4 py-8 text-center text-gray-400"
                       >
                         No fees yet — record a payment to create one
@@ -299,6 +301,17 @@ export default async function StudentProfilePage({
                               <div className="text-green-700">Board done</div>
                             )}
                           </td>
+                          <td className="px-4 py-2">
+                            <RemoveFeeButton
+                              feeId={f.id}
+                              feeLabel={`${ft?.name || "Fee"} · ${f.session}${
+                                f.term && f.term !== "Monthly"
+                                  ? " · " + f.term
+                                  : ""
+                              }`}
+                              amountPaid={Number(f.amount_paid || 0)}
+                            />
+                          </td>
                         </tr>
                       );
                     })
@@ -332,7 +345,7 @@ export default async function StudentProfilePage({
                   {(payments || []).length === 0 ? (
                     <tr>
                       <td
-                        colSpan={4}
+                        colSpan={5}
                         className="px-4 py-8 text-center text-gray-400"
                       >
                         No payments yet
