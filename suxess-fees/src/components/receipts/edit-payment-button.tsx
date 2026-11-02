@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { MoneyInput, parseMoneyInput, formatMoneyInput } from "@/components/ui/money-input";
 import { Pencil, X } from "lucide-react";
 
 export function EditPaymentButton({
@@ -25,7 +26,7 @@ export function EditPaymentButton({
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
-    amount: String(amount),
+    amount: formatMoneyInput(String(Math.round(Number(amount || 0)))),
     payment_date: String(paymentDate || "").slice(0, 10),
     payment_method: paymentMethod || "cash",
     notes: notes || "",
@@ -37,7 +38,7 @@ export function EditPaymentButton({
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newAmount = Number(form.amount);
+    const newAmount = parseMoneyInput(form.amount);
     if (!newAmount || newAmount <= 0) {
       alert("Amount must be greater than 0");
       return;

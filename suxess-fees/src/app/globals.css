@@ -83,3 +83,7 @@ body.privacy-mode #admin-privacy-root p.text-sm:not(.font-bold),
 body.privacy-mode #admin-privacy-root a {
   filter: none !important;
 }
+
+
+/* Alpha Insight dark mode surfaces */
+.dark .bg-white { }

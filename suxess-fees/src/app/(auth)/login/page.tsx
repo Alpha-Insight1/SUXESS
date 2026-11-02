@@ -34,19 +34,19 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen p-4 flex items-center justify-center bg-gradient-to-br from-green-50 to-emerald-100 px-4">
+    <div className="min-h-screen p-4 flex items-center justify-center bg-gradient-to-br from-slate-100 to-blue-100 dark:from-gray-950 dark:to-slate-900 px-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8">
         <div className="flex flex-col items-center mb-8">
           <Image
-            src="/logo.png"
-            alt="Suxess Schools"
+            src="/alpha-insight-logo.jpg"
+            alt="Alpha Insight Schools"
             width={140}
             height={140}
             className="mb-4 object-contain"
             priority
           />
-          <h1 className="text-2xl font-bold text-brand-green">Suxess Fees</h1>
-          <p className="text-gray-500 text-sm mt-1">Admin Login</p>
+          <h1 className="text-2xl font-bold text-brand-navy">Alpha Insight</h1>
+          <p className="text-gray-500 text-sm mt-1">School operations & analytics</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-5">
@@ -65,7 +65,7 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-green focus:border-transparent outline-none"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none"
               placeholder="admin@suxess.com"
             />
           </div>
@@ -79,7 +79,7 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-green focus:border-transparent outline-none"
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-blue focus:border-transparent outline-none"
               placeholder="••••••••"
             />
           </div>
@@ -87,7 +87,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-brand-green hover:bg-brand-dark text-white font-medium py-2.5 rounded-lg transition disabled:opacity-60"
+            className="w-full bg-brand-blue hover:bg-brand-navy text-white font-medium py-2.5 rounded-lg transition disabled:opacity-60"
           >
             {loading ? "Signing in..." : "Sign In"}
           </button>
@@ -97,7 +97,7 @@ export default function LoginPage() {
           </p>
 
         <p className="text-center text-xs text-gray-400 mt-6">
-          Suxess Schools • Arepo • Ofada Mowe
+          Alpha Insight Schools • Arepo • Ofada Mowe
         </p>
       </div>
     </div>

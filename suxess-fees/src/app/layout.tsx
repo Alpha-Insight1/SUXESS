@@ -1,16 +1,18 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { OfflineBanner } from "@/components/layout/offline-banner";
+import { ThemeProvider } from "@/components/layout/theme-provider";
 
 export const metadata: Metadata = {
-  title: "Suxess Fees | School Payment Tracker",
-  description: "Student fee management system for Suxess Schools",
-  applicationName: "Suxess Fees",
+  title: "Alpha Insight | School Operations & Analytics",
+  description:
+    "Student fees, school bus, inventory and analytics for schools — by Alpha Insight",
+  applicationName: "Alpha Insight",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Suxess Fees",
+    title: "Alpha Insight",
   },
   icons: {
     icon: [
@@ -23,7 +25,10 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#166534",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#1B6CA8" },
+    { media: "(prefers-color-scheme: dark)", color: "#0F2744" },
+  ],
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
@@ -36,10 +41,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className="bg-gray-50 text-gray-900 antialiased">
-        {children}
-        <OfflineBanner />
+    <html lang="en" suppressHydrationWarning>
+      <body className="bg-gray-50 text-gray-900 antialiased dark:bg-gray-950 dark:text-gray-100">
+        <ThemeProvider>
+          <OfflineBanner />
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );

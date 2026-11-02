@@ -21,34 +21,38 @@ import {
   GraduationCap,
   ListChecks,
   Award,
+  Bus,
   LogOut,
   Menu,
   X,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
 
 type NavItem = {
   href: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
-  show?: "all" | "admin" | "main" | "tutorial";
+  show?: "all" | "admin" | "secretary";
 };
 
+/** Single-school product: no branch filters — admin vs secretary only */
 const navItems: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, show: "all" },
   { href: "/payments", label: "Record Payment", icon: CreditCard, show: "all" },
-  { href: "/outstanding", label: "Outstanding", icon: AlertCircle, show: "main" },
-  { href: "/fee-tracker", label: "Fees Tracker", icon: ListChecks, show: "main" },
-  { href: "/scholarships", label: "Scholarships", icon: Award, show: "admin" },
+  { href: "/outstanding", label: "Outstanding", icon: AlertCircle, show: "all" },
+  { href: "/fee-tracker", label: "Fees Tracker", icon: ListChecks, show: "all" },
   { href: "/students", label: "Students", icon: Users, show: "all" },
   { href: "/receipts", label: "Receipts", icon: Receipt, show: "all" },
-  { href: "/renewals", label: "Card Renewals", icon: CalendarClock, show: "tutorial" },
+  { href: "/school-bus", label: "School Bus", icon: Bus, show: "all" },
+  { href: "/renewals", label: "Card Renewals", icon: CalendarClock, show: "all" },
   { href: "/exam-register", label: "Exam Register", icon: ClipboardCheck, show: "all" },
   { href: "/expenses", label: "Expenses", icon: Wallet, show: "all" },
-  { href: "/teacher-pay", label: "Teacher Daily Pay", icon: BookOpen, show: "tutorial" },
+  { href: "/teacher-pay", label: "Teacher Daily Pay", icon: BookOpen, show: "all" },
   { href: "/private-lessons", label: "Private Lessons", icon: GraduationCap, show: "all" },
-  { href: "/inventory", label: "Inventory", icon: Package, show: "main" },
+  { href: "/inventory", label: "Inventory", icon: Package, show: "all" },
+  { href: "/scholarships", label: "Scholarships", icon: Award, show: "admin" },
   { href: "/parents", label: "Parents · SMS", icon: Contact, show: "admin" },
   { href: "/loans", label: "Teacher Loans", icon: Banknote, show: "admin" },
   { href: "/staff", label: "Staff & Salaries", icon: UserCog, show: "admin" },
@@ -58,8 +62,6 @@ export function Sidebar({
   roleLabel,
   campusLabel,
   isAdminUser,
-  isMainCampus,
-  isTutorialCampus,
 }: {
   roleLabel?: string;
   campusLabel?: string;
@@ -72,12 +74,10 @@ export function Sidebar({
   const supabase = createClient();
   const [open, setOpen] = useState(false);
 
-  // Close drawer on route change (mobile)
   useEffect(() => {
     setOpen(false);
   }, [pathname]);
 
-  // Prevent body scroll when drawer open
   useEffect(() => {
     if (open) document.body.style.overflow = "hidden";
     else document.body.style.overflow = "";
@@ -86,100 +86,83 @@ export function Sidebar({
     };
   }, [open]);
 
-  const handleLogout = async () => {
+  const visible = navItems.filter((item) => {
+    if (!item.show || item.show === "all") return true;
+    if (item.show === "admin") return !!isAdminUser;
+    if (item.show === "secretary") return !isAdminUser;
+    return true;
+  });
+
+  const logout = async () => {
     await supabase.auth.signOut();
     router.push("/login");
     router.refresh();
   };
 
-  const visible = navItems.filter((item) => {
-    const show = item.show || "all";
-    if (show === "all") return true;
-    if (isAdminUser) return true;
-    if (show === "admin") return false;
-    if (show === "main") return !!isMainCampus;
-    if (show === "tutorial") return !!isTutorialCampus;
-    return false;
-  });
-
-  const nav = (
+  const NavLinks = () => (
     <>
-      <div className="flex items-center gap-3 px-4 sm:px-5 py-4 border-b border-white/10">
-        <Image
-          src="/logo.png"
-          alt="Suxess Schools"
-          width={44}
-          height={44}
-          className="rounded-full bg-white p-0.5 object-contain shrink-0"
-          priority
-        />
-        <div className="min-w-0 flex-1">
-          <p className="font-bold text-sm leading-tight truncate">Suxess Fees</p>
-          <p className="text-xs text-green-200 truncate">
-            {campusLabel
-              ? campusLabel
-              : isAdminUser
-                ? "All campuses"
-                : "Payment Tracker"}
-          </p>
+      <div className="px-4 pt-5 pb-4 border-b border-white/10">
+        <div className="flex items-center gap-3">
+          <Image
+            src="/alpha-insight-logo.jpg"
+            alt="Alpha Insight"
+            width={44}
+            height={44}
+            className="rounded-lg object-contain bg-white p-0.5"
+            priority
+          />
+          <div className="min-w-0">
+            <p className="font-bold text-white text-sm leading-tight truncate">
+              Alpha Insight
+            </p>
+            <p className="text-[10px] text-blue-200/90 uppercase tracking-wide truncate">
+              Strategy & Analytics
+            </p>
+          </div>
         </div>
-        <button
-          type="button"
-          className="lg:hidden p-2 -mr-1 rounded-lg hover:bg-white/10"
-          onClick={() => setOpen(false)}
-          aria-label="Close menu"
-        >
-          <X className="w-5 h-5" />
-        </button>
+        <p className="mt-3 text-xs text-blue-100/80 truncate">
+          {roleLabel || "User"}
+          {campusLabel ? ` · ${campusLabel}` : ""}
+        </p>
       </div>
 
-      {(roleLabel || campusLabel) && (
-        <div className="px-4 py-2.5 border-b border-white/10">
-          <p className="text-[10px] uppercase tracking-wide text-green-200">
-            Signed in as
-          </p>
-          <p className="text-sm font-medium truncate">
-            {roleLabel || "Staff"}
-            {campusLabel ? ` · ${campusLabel}` : ""}
-          </p>
-        </div>
-      )}
-
-      <nav className="flex-1 overflow-y-auto py-3 px-2.5 space-y-0.5 overscroll-contain">
+      <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
         {visible.map((item) => {
           const active =
             item.href === "/"
               ? pathname === "/"
-              : pathname === item.href || pathname.startsWith(item.href + "/");
+              : pathname.startsWith(item.href);
+          const Icon = item.icon;
           return (
             <Link
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition active:scale-[0.98]",
+                "flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition",
                 active
-                  ? "bg-white text-brand-green"
-                  : "text-green-50 hover:bg-white/10"
+                  ? "bg-white/15 text-white"
+                  : "text-blue-100/90 hover:bg-white/10 hover:text-white"
               )}
             >
-              <item.icon className="w-5 h-5 shrink-0" />
-              <span className="truncate">{item.label}</span>
+              <Icon className="w-4 h-4 shrink-0" />
+              {item.label}
             </Link>
           );
         })}
       </nav>
 
-      <div className="p-3 border-t border-white/10 safe-bottom space-y-2">
+      <div className="p-3 border-t border-white/10 space-y-2">
+        <ThemeToggle className="w-full justify-center border-white/20 bg-white/10 text-white hover:bg-white/15" />
         <button
           type="button"
-          onClick={handleLogout}
-          className="flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-green-50 hover:bg-white/10 transition"
+          onClick={logout}
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm text-blue-100 hover:bg-white/10"
         >
-          <LogOut className="w-5 h-5" />
-          Log out
+          <LogOut className="w-4 h-4" />
+          Sign out
         </button>
-        <p className="text-center text-[10px] text-green-200/90 leading-tight px-1">
-          Built by <span className="font-semibold text-white">Alpha Insight</span>
+        <p className="text-[10px] text-center text-blue-200/60">
+          Alpha Insight
         </p>
       </div>
     </>
@@ -188,50 +171,53 @@ export function Sidebar({
   return (
     <>
       {/* Mobile top bar */}
-      <header className="lg:hidden fixed top-0 left-0 right-0 z-40 h-14 bg-brand-green text-white flex items-center gap-3 px-3 shadow-md">
+      <div className="lg:hidden fixed top-0 inset-x-0 z-40 h-14 bg-brand-navy dark:bg-gray-950 border-b border-white/10 flex items-center px-3 gap-3">
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="p-2 rounded-lg hover:bg-white/10 active:bg-white/20"
+          className="p-2 rounded-lg text-white hover:bg-white/10"
           aria-label="Open menu"
         >
-          <Menu className="w-6 h-6" />
+          <Menu className="w-5 h-5" />
         </button>
         <Image
-          src="/logo.png"
-          alt=""
+          src="/alpha-insight-logo.jpg"
+          alt="Alpha Insight"
           width={32}
           height={32}
-          className="rounded-full bg-white p-0.5 object-contain"
+          className="rounded object-contain bg-white p-0.5"
         />
-        <div className="min-w-0 flex-1">
-          <p className="font-semibold text-sm truncate">Suxess Fees</p>
-          <p className="text-[10px] text-green-100 truncate">
-            {roleLabel || "Staff"}
-            {campusLabel ? ` · ${campusLabel}` : isAdminUser ? " · All" : ""}
-          </p>
+        <span className="text-white font-semibold text-sm truncate">
+          Alpha Insight
+        </span>
+        <div className="ml-auto">
+          <ThemeToggle />
         </div>
-      </header>
+      </div>
 
-      {/* Mobile overlay */}
+      {/* Mobile drawer */}
       {open && (
-        <button
-          type="button"
-          className="lg:hidden fixed inset-0 z-40 bg-black/50"
-          aria-label="Close menu"
-          onClick={() => setOpen(false)}
-        />
+        <div className="lg:hidden fixed inset-0 z-50 flex">
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setOpen(false)}
+          />
+          <aside className="relative w-72 max-w-[85vw] h-full bg-brand-navy dark:bg-gray-900 flex flex-col shadow-xl">
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="absolute top-3 right-3 p-2 text-white/80 hover:text-white"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <NavLinks />
+          </aside>
+        </div>
       )}
 
-      {/* Drawer (mobile) + fixed sidebar (desktop) */}
-      <aside
-        className={cn(
-          "fixed top-0 left-0 z-50 h-full w-[min(18rem,85vw)] max-w-xs bg-brand-green text-white flex flex-col shadow-xl transition-transform duration-200 ease-out",
-          "lg:translate-x-0 lg:w-64 lg:max-w-none lg:shadow-none",
-          open ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-        )}
-      >
-        {nav}
+      {/* Desktop sidebar */}
+      <aside className="hidden lg:flex fixed left-0 top-0 bottom-0 w-64 bg-brand-navy dark:bg-gray-900 flex-col z-30">
+        <NavLinks />
       </aside>
     </>
   );
