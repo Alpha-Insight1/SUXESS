@@ -23,7 +23,16 @@ export default async function FeeTrackerPage({
   const lockedCampus = campusFilter(profile);
 
   // Main school secretaries + admin only
-  
+  const campusLbl = `${profile?.campuses?.short_name || ""} ${
+    profile?.campuses?.name || ""
+  }`.toLowerCase();
+  const isTutorial =
+    campusLbl.includes("arepo") ||
+    campusLbl.includes("ofada") ||
+    campusLbl.includes("mowe");
+  if (profile?.role === "secretary" && isTutorial) {
+    redirect("/");
+  }
 
   const session = (params.session || "2025/2026").trim();
   const term = (params.term || "First Term").trim();

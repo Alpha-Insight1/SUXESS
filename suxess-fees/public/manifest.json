@@ -1,11 +1,12 @@
 {
-  "name": "Alpha Insight",
-  "short_name": "Alpha Insight",
-  "description": "School fees, operations and analytics by Alpha Insight",
+  "name": "Suxess Fees",
+  "short_name": "Suxess Fees",
+  "description": "Student fee management for Suxess Schools",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0F2744",
-  "theme_color": "#1B6CA8",
+  "background_color": "#ffffff",
+  "theme_color": "#166534",
+  "orientation": "portrait-primary",
   "icons": [
     {
       "src": "/icon-192.png",

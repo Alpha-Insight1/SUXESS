@@ -20,7 +20,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { ExportAllData } from "@/components/admin/export-all-data";
-import { MoneyChart } from "@/components/dashboard/money-chart";
 
 function isoDate(d: Date) {
   return d.toISOString().slice(0, 10);
@@ -819,7 +818,7 @@ export default async function DashboardPage() {
       <div className="mb-8 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-brand-green">
-            {admin ? "Alpha Insight · overview" : "Campus desk"}
+            {admin ? "Executive overview" : "Campus desk"}
           </p>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mt-1">
             Dashboard
@@ -1088,25 +1087,12 @@ export default async function DashboardPage() {
             </div>
           </div>
 
-          <div className="mb-8">
-            <MoneyChart
-              months={monthlyAnalysis.map((m: any) => ({
-                label: m.label,
-                moneyIn: Number(m.moneyIn ?? 0),
-                moneyOut: Number(m.moneyOut ?? 0),
-                profit: Number(m.profit ?? 0),
-              }))}
-            />
-          </div>
-
           {/* Monthly stats — includes last month (backdated dates) */}
           <div className="mb-8">
             <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2 mb-3">
               <div>
-                <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-                  Monthly statistics
-                </h2>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
+                <h2 className="text-lg font-bold text-gray-900">Monthly statistics</h2>
+                <p className="text-sm text-gray-500">
                   Based on the date on each payment/expense (not when it was typed).
                   Last month appears if secretaries entered past dates.
                 </p>
