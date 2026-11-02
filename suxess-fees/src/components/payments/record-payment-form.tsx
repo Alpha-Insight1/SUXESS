@@ -749,15 +749,12 @@ export function RecordPaymentForm({
                 <label className="block text-sm font-medium mb-1">
                   Fee Amount (₦) *
                 </label>
-                <input
-                  type="number"
+                <MoneyInput
                   required={showNewFeeFields}
-                  min="1"
-                  step="1"
                   value={feeAmount}
-                  onChange={(e) => setFeeAmount(formatMoneyInput(e.target.value))}
+                  onValueChange={(display) => setFeeAmount(display)}
                   placeholder="Total amount for this fee"
-                  className="w-full border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-green"
+                  className="w-full border rounded-lg pl-7 pr-3 py-2 text-sm outline-none focus:ring-2 focus:ring-brand-green"
                 />
                 <p className="text-xs text-gray-400 mt-1">
                   Full amount the student is expected to pay
@@ -886,15 +883,12 @@ export function RecordPaymentForm({
               <label className="block text-sm font-medium mb-1">
                 Amount Paying Now (₦) *
               </label>
-              <input
-                type="number"
+              <MoneyInput
                 required
-                min="1"
-                step="1"
                 value={amountPaid}
-                onChange={(e) => setAmountPaid(formatMoneyInput(e.target.value))}
+                onValueChange={(display) => setAmountPaid(display)}
                 placeholder="How much is being paid"
-                className="w-full border rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-green"
+                className="w-full border rounded-lg pl-7 pr-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-green"
               />
             </div>
             <div>
