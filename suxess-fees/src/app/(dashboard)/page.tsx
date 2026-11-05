@@ -44,6 +44,19 @@ function isTutorialCampus(short?: string | null, name?: string | null) {
   );
 }
 
+/** Parent paid (money in) and teacher pay (money out) for a private lesson row. */
+function privateLessonAmounts(r: any): { paid: number; teacher: number } {
+  const paid = Number(r?.amount_paid || 0);
+  let teacher = Number(r?.teacher_amount || 0);
+  if ((!teacher || teacher <= 0) && Array.isArray(r?.teachers)) {
+    teacher = r.teachers.reduce(
+      (s: number, t: any) => s + Number(t?.amount || 0),
+      0
+    );
+  }
+  return { paid, teacher };
+}
+
 function isExamFeeName(name?: string | null) {
   if (!name) return false;
   const n = name.toLowerCase();
@@ -194,14 +207,14 @@ export default async function DashboardPage() {
 
   let privateLessonMonthQ = supabase
     .from("private_lessons")
-    .select("amount_paid, teacher_amount, lesson_date, campus_id")
+    .select("amount_paid, teacher_amount, teachers, lesson_date, campus_id")
     .gte("lesson_date", monthStart)
     .lte("lesson_date", monthEnd);
   if (campusId) privateLessonMonthQ = privateLessonMonthQ.eq("campus_id", campusId);
 
   let privateLessonTrendQ = supabase
     .from("private_lessons")
-    .select("amount_paid, teacher_amount, lesson_date, campus_id")
+    .select("amount_paid, teacher_amount, teachers, lesson_date, campus_id")
     .gte("lesson_date", sixMonthsStart);
   if (campusId) privateLessonTrendQ = privateLessonTrendQ.eq("campus_id", campusId);
 
@@ -214,7 +227,7 @@ export default async function DashboardPage() {
 
   let privateLessonTodayQ = supabase
     .from("private_lessons")
-    .select("amount_paid, teacher_amount, lesson_date, campus_id")
+    .select("amount_paid, teacher_amount, teachers, lesson_date, campus_id")
     .eq("lesson_date", today);
   if (campusId) privateLessonTodayQ = privateLessonTodayQ.eq("campus_id", campusId);
 
@@ -484,14 +497,18 @@ export default async function DashboardPage() {
   );
 
   const privateLessonTodayProfit = (privateLessonTodayRes?.data || []).reduce(
-    (s: number, r: any) =>
-      s + (Number(r.amount_paid || 0) - Number(r.teacher_amount || 0)),
+    (s: number, r: any) => {
+      const { paid, teacher } = privateLessonAmounts(r);
+      return s + (paid - teacher);
+    },
     0
   );
   const privateLessonDueTodayCount = (privateLessonDueTodayRes?.data || []).length;
   const privateLessonMonthProfit = (privateLessonMonthRes?.data || []).reduce(
-    (s: number, r: any) =>
-      s + (Number(r.amount_paid || 0) - Number(r.teacher_amount || 0)),
+    (s: number, r: any) => {
+      const { paid, teacher } = privateLessonAmounts(r);
+      return s + (paid - teacher);
+    },
     0
   );
 
@@ -520,19 +537,19 @@ export default async function DashboardPage() {
   );
 
   const privateLessonInToday = (privateLessonTodayRes?.data || []).reduce(
-    (s: number, r: any) => s + Number(r.amount_paid || 0),
+    (s: number, r: any) => s + privateLessonAmounts(r).paid,
     0
   );
   const privateLessonOutToday = (privateLessonTodayRes?.data || []).reduce(
-    (s: number, r: any) => s + Number(r.teacher_amount || 0),
+    (s: number, r: any) => s + privateLessonAmounts(r).teacher,
     0
   );
   const privateLessonInMonth = (privateLessonMonthRes?.data || []).reduce(
-    (s: number, r: any) => s + Number(r.amount_paid || 0),
+    (s: number, r: any) => s + privateLessonAmounts(r).paid,
     0
   );
   const privateLessonOutMonth = (privateLessonMonthRes?.data || []).reduce(
-    (s: number, r: any) => s + Number(r.teacher_amount || 0),
+    (s: number, r: any) => s + privateLessonAmounts(r).teacher,
     0
   );
 
@@ -650,6 +667,22 @@ export default async function DashboardPage() {
     const id = e.campus_id as string;
     if (id && snaps.has(id))
       snaps.get(id)!.expensesMonth += Number(e.amount || 0);
+  }
+  // Private lessons: parent pay = income, teacher pay = cost
+  for (const r of privateLessonMonthRes?.data || []) {
+    const id = r.campus_id as string;
+    if (id && snaps.has(id)) {
+      const { paid, teacher } = privateLessonAmounts(r);
+      snaps.get(id)!.incomeMonth += paid;
+      snaps.get(id)!.expensesMonth += teacher;
+    }
+  }
+  for (const r of privateLessonTodayRes?.data || []) {
+    const id = r.campus_id as string;
+    if (id && snaps.has(id)) {
+      const { paid } = privateLessonAmounts(r);
+      snaps.get(id)!.incomeToday += paid;
+    }
   }
   for (const s of activeStaff || []) {
     const id = s.campus_id as string;
@@ -795,8 +828,7 @@ export default async function DashboardPage() {
     const key = String(e.lesson_date || "").slice(0, 7);
     const m = monthMap.get(key);
     if (m) {
-      const pin = Number(e.amount_paid || 0);
-      const pout = Number(e.teacher_amount || 0);
+      const { paid: pin, teacher: pout } = privateLessonAmounts(e);
       m.privateIn += pin;
       m.privateOut += pout;
       m.moneyIn += pin;
@@ -1348,8 +1380,22 @@ export default async function DashboardPage() {
               <p className="text-2xl font-bold text-green-700 mt-2">
                 {formatCurrency(privateLessonMonthProfit)}
               </p>
+              <ul className="mt-2 text-xs text-gray-600 space-y-0.5">
+                <li className="flex justify-between gap-2">
+                  <span>Parents paid (money in)</span>
+                  <span className="font-medium text-green-700">
+                    {formatCurrency(privateLessonInMonth)}
+                  </span>
+                </li>
+                <li className="flex justify-between gap-2">
+                  <span>Teachers paid (money out)</span>
+                  <span className="font-medium text-red-700">
+                    {formatCurrency(privateLessonOutMonth)}
+                  </span>
+                </li>
+              </ul>
               <p className="text-xs text-gray-500 mt-1">
-                Today {formatCurrency(privateLessonTodayProfit)}
+                Today profit {formatCurrency(privateLessonTodayProfit)}
                 {privateLessonDueTodayCount > 0 && (
                   <span className="block text-amber-700 font-medium mt-0.5">
                     {privateLessonDueTodayCount} due today
