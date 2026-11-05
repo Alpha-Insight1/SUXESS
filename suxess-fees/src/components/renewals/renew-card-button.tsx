@@ -33,12 +33,15 @@ export function RenewCardButton({
   studentName,
   feeAmount,
   amountPaidSoFar,
+  currentValidUntil,
 }: {
   feeId: string;
   studentId: string;
   studentName: string;
   feeAmount: number;
   amountPaidSoFar: number;
+  /** Existing card end date (YYYY-MM-DD). Renewal extends from the later of this and payment date. */
+  currentValidUntil?: string | null;
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -89,9 +92,14 @@ export function RenewCardButton({
       return;
     }
     setLoading(true);
-    const start = fromDate || new Date().toISOString().slice(0, 10);
+    const payDate = fromDate || new Date().toISOString().slice(0, 10);
+    // Extend from the later of existing card end and payment date (so early renew stacks)
+    const base =
+      currentValidUntil && currentValidUntil > payDate
+        ? currentValidUntil
+        : payDate;
     const days = daysFromUnit(n, unit);
-    const until = addDaysToDate(start, days);
+    const until = addDaysToDate(base, days);
 
     const unitLabel =
       unit === "days" ? "day" : unit === "weeks" ? "week" : "month";
@@ -102,7 +110,7 @@ export function RenewCardButton({
       student_fee_id: feeId,
       amount: paid,
       payment_method: method,
-      payment_date: start,
+      payment_date: payDate,
       notes: note,
     });
 

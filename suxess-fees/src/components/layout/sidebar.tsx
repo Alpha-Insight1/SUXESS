@@ -47,7 +47,7 @@ const navItems: NavItem[] = [
   { href: "/exam-register", label: "Exam Register", icon: ClipboardCheck, show: "all" },
   { href: "/expenses", label: "Expenses", icon: Wallet, show: "all" },
   { href: "/teacher-pay", label: "Teacher Daily Pay", icon: BookOpen, show: "tutorial" },
-  { href: "/private-lessons", label: "Private Lessons", icon: GraduationCap, show: "all" },
+  { href: "/private-lessons", label: "Private Lessons", icon: GraduationCap, show: "main" },
   { href: "/inventory", label: "Inventory", icon: Package, show: "main" },
   { href: "/parents", label: "Parents · SMS", icon: Contact, show: "admin" },
   { href: "/loans", label: "Teacher Loans", icon: Banknote, show: "admin" },

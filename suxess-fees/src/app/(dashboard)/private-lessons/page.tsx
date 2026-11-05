@@ -1,5 +1,6 @@
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, isTutorialCampusName } from "@/lib/utils";
 import { getCurrentProfile, campusFilter, isAdmin } from "@/lib/auth";
 import { PrivateLessonForm } from "@/components/private-lessons/private-lesson-form";
 
@@ -8,6 +9,13 @@ export default async function PrivateLessonsPage() {
   const profile = await getCurrentProfile();
   const lockedCampus = campusFilter(profile);
   const admin = isAdmin(profile);
+  // Private lessons are main school only — hide from Arepo / Ofada
+  const campusLbl = `${profile?.campuses?.short_name || ""} ${
+    profile?.campuses?.name || ""
+  }`;
+  if (!admin && isTutorialCampusName(campusLbl)) {
+    redirect("/");
+  }
 
   let campusesQuery = supabase
     .from("campuses")
@@ -74,6 +82,17 @@ export default async function PrivateLessonsPage() {
             {dueTodayList.map((r: any) => (
               <li key={r.id}>
                 <span className="font-medium">{r.parent_name}</span>
+                {r.parent_phone ? (
+                  <>
+                    {" · "}
+                    <a
+                      href={`tel:${r.parent_phone}`}
+                      className="text-brand-green font-medium underline"
+                    >
+                      {r.parent_phone}
+                    </a>
+                  </>
+                ) : null}
                 {r.student_name ? ` · ${r.student_name}` : ""}
                 {" · "}
                 {r.teacher_name}
@@ -154,9 +173,16 @@ export default async function PrivateLessonsPage() {
                       </td>
                       <td className="px-3 py-2">
                         <div className="font-medium">{r.parent_name}</div>
-                        <div className="text-xs text-gray-400">
-                          {r.student_name || r.parent_phone || ""}
-                        </div>
+                        {r.parent_phone && (
+                          <div className="text-xs text-brand-green font-medium">
+                            <a href={`tel:${r.parent_phone}`}>{r.parent_phone}</a>
+                          </div>
+                        )}
+                        {r.student_name && (
+                          <div className="text-xs text-gray-400">
+                            {r.student_name}
+                          </div>
+                        )}
                       </td>
                       <td className="px-3 py-2">
                       {Array.isArray(r.teachers) && r.teachers.length > 0 ? (

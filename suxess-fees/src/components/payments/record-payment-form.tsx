@@ -33,6 +33,7 @@ type OutstandingFee = {
   term?: string;
   fee_type_id?: string;
   fee_types?: { name?: string } | null;
+  valid_until?: string | null;
 };
 
 type PaymentSummary = {
@@ -445,19 +446,26 @@ export function RecordPaymentForm({
       feeId &&
       !isExamRegistrationFeeName(feeNameForCard)
     ) {
-      const payDate =
+      const payDate = String(
         paymentDate ||
-        (payment as any).payment_date ||
-        new Date().toISOString().slice(0, 10);
+          (payment as any).payment_date ||
+          new Date().toISOString().slice(0, 10)
+      ).slice(0, 10);
+      // Extend from the later of existing card end and payment date
+      const existingUntil = selectedFee?.valid_until
+        ? String(selectedFee.valid_until).slice(0, 10)
+        : "";
+      const base =
+        existingUntil && existingUntil > payDate ? existingUntil : payDate;
       // Months covered by THIS payment relative to the fee amount
       const monthsCovered =
         feeTotal > 0 ? Math.floor(paid / feeTotal) : 0;
       let until: string;
       if (monthsCovered >= 1) {
-        until = addMonths(String(payDate).slice(0, 10), monthsCovered);
+        until = addMonths(base, monthsCovered);
       } else {
         // Partial payment of one period
-        until = addDaysToDate(String(payDate).slice(0, 10), 14);
+        until = addDaysToDate(base, 14);
       }
       await supabase
         .from("student_fees")

@@ -70,7 +70,7 @@ export default async function RenewalsPage() {
   }
 
   const { data: rows } = await query;
-  const list = (rows || []).filter((r: any) => {
+  const rawList = (rows || []).filter((r: any) => {
     const ft = Array.isArray(r.fee_types) ? r.fee_types[0] : r.fee_types;
     const n = String(ft?.name || "").toLowerCase();
     const isExam =
@@ -83,6 +83,25 @@ export default async function RenewalsPage() {
         (n.includes("regist") || n.includes("form") || n.includes("pin")));
     return !isExam;
   });
+
+  // One row per student: keep the fee with the latest valid_until.
+  // Prevents old expired fee rows from still showing after a successful renew.
+  const byStudent = new Map<string, any>();
+  for (const r of rawList) {
+    const st = Array.isArray(r.students) ? r.students[0] : r.students;
+    const sid = st?.id || r.id;
+    const prev = byStudent.get(sid);
+    if (!prev) {
+      byStudent.set(sid, r);
+      continue;
+    }
+    const prevUntil = prev.valid_until || "";
+    const nextUntil = r.valid_until || "";
+    if (nextUntil > prevUntil) {
+      byStudent.set(sid, r);
+    }
+  }
+  const list = Array.from(byStudent.values());
 
   function splitBranch(items: any[]) {
     const arepo = items.filter(isArepo);
@@ -212,6 +231,7 @@ export default async function RenewalsPage() {
                         studentName={st.full_name || "Student"}
                         feeAmount={Number(r.amount || 0)}
                         amountPaidSoFar={Number(r.amount_paid || 0)}
+                        currentValidUntil={r.valid_until}
                       />
                     ) : null}
                   </td>
