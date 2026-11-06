@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { addDaysToDate, formatCurrency } from "@/lib/utils";
+import { toastSuccess, toastError } from "@/components/ui/toast";
 import {
   formatMoneyInput,
   parseMoneyInput,
@@ -79,16 +80,16 @@ export function RenewCardButton({
   const save = async () => {
     const paid = parseMoneyInput(amount);
     if (!paid || paid <= 0) {
-      alert("Enter the amount the parent paid (e.g. 1,500).");
+      toastError("Enter the amount the parent paid (for example 1,500).");
       return;
     }
     if (!studentId) {
-      alert("Missing student. Open the student profile and try again.");
+      toastError("Student is missing. Open the student profile and try again.");
       return;
     }
     const n = Number(qty) || 1;
     if (n <= 0) {
-      alert("Enter how long the card should last.");
+      toastError("Enter how long the card should last.");
       return;
     }
     setLoading(true);
@@ -116,7 +117,7 @@ export function RenewCardButton({
 
     if (payErr) {
       setLoading(false);
-      alert(payErr.message);
+      toastError(payErr.message);
       return;
     }
 
@@ -130,14 +131,18 @@ export function RenewCardButton({
 
     setLoading(false);
     if (error) {
-      alert(
-        "Payment saved, but card date failed: " +
+      toastError(
+        "Payment was saved, but the card date could not be updated: " +
           error.message +
-          ". Check Card Renewals again."
+          ". Please check Card Renewals."
       );
       router.refresh();
       return;
     }
+    toastSuccess(
+      `${studentName}: card renewed until ${until}. Payment of ${formatCurrency(paid)} recorded.`,
+      "Card renewed"
+    );
     setOpen(false);
     router.refresh();
   };
@@ -159,19 +164,43 @@ export function RenewCardButton({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-5 space-y-3 max-h-[90vh] overflow-y-auto">
             <h2 className="text-lg font-semibold">Renew card & record payment</h2>
-            <p className="text-sm text-gray-600">
-              {studentName}
-              {feeAmount > 0 && (
-                <span className="block text-xs text-gray-500 mt-0.5">
-                  Monthly fee {formatCurrency(feeAmount)}
-                  {perDay > 0 && (
-                    <> · guide ~{formatCurrency(perDay)}/day</>
-                  )}
-                  <br />
-                  Paid so far {formatCurrency(amountPaidSoFar)}
-                </span>
+            <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2.5 text-sm">
+              <p className="font-medium text-gray-900">{studentName}</p>
+              <div className="mt-1.5 grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <p className="text-gray-500">Monthly lesson fee</p>
+                  <p className="font-semibold text-gray-900">
+                    {feeAmount > 0 ? formatCurrency(feeAmount) : "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-gray-500">Amount paid so far</p>
+                  <p className="font-semibold text-green-700">
+                    {formatCurrency(amountPaidSoFar)}
+                  </p>
+                </div>
+              </div>
+              {feeAmount > 0 && amountPaidSoFar > 0 && amountPaidSoFar < feeAmount && (
+                <p className="mt-1.5 text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-100 rounded px-2 py-1">
+                  Partial pay · about{" "}
+                  {Math.max(
+                    1,
+                    Math.round((amountPaidSoFar / feeAmount) * 30)
+                  )}{" "}
+                  day(s) of the month covered
+                </p>
               )}
-            </p>
+              {feeAmount > 0 && amountPaidSoFar >= feeAmount && (
+                <p className="mt-1.5 text-[11px] font-semibold text-green-800 bg-green-50 border border-green-100 rounded px-2 py-1">
+                  Monthly fee fully paid
+                </p>
+              )}
+              {perDay > 0 && (
+                <p className="mt-1 text-[11px] text-gray-500">
+                  Guide ~{formatCurrency(perDay)} per day
+                </p>
+              )}
+            </div>
 
             <div>
               <label className="block text-sm font-medium mb-1">

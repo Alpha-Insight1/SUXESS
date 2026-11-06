@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Plus, X } from "lucide-react";
 import { MoneyInput, parseMoneyInput } from "@/components/ui/money-input";
 import { formatCurrency } from "@/lib/utils";
+import { toastSuccess, toastError } from "@/components/ui/toast";
 
 type Student = {
   id: string;
@@ -47,7 +48,7 @@ export function GrantScholarshipForm({
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!studentId) {
-      alert("Select a student.");
+      toastError("Please select a student before submitting.");
       return;
     }
     setLoading(true);
@@ -111,7 +112,7 @@ export function GrantScholarshipForm({
 
     if (error) {
       setLoading(false);
-      alert(error.message);
+      toastError(error.message);
       return;
     }
 
@@ -127,11 +128,12 @@ export function GrantScholarshipForm({
 
     setLoading(false);
     if (needsApproval) {
-      alert(
-        `This student already paid ${formatCurrency(priorPaid)} for ${session} · ${term}.\n\nScholarship is pending. Only the director can approve — then that amount is subtracted from school income.`
+      toastSuccess(
+        `This student already paid ${formatCurrency(priorPaid)} for ${session} · ${term}. Scholarship is pending director approval; that amount will then be offset from school income.`,
+        "Pending approval"
       );
     } else {
-      alert("Scholarship granted and active.");
+      toastSuccess("Scholarship granted and is now active.", "Scholarship granted");
     }
     setOpen(false);
     setStudentId("");

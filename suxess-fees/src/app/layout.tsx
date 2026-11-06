@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { OfflineBanner } from "@/components/layout/offline-banner";
+import { ToastHost } from "@/components/ui/toast";
 
 export const metadata: Metadata = {
   title: "Suxess Fees | School Payment Tracker",
@@ -40,6 +41,7 @@ export default function RootLayout({
       <body className="bg-gray-50 text-gray-900 antialiased">
         {children}
         <OfflineBanner />
+        <ToastHost />
       </body>
     </html>
   );

@@ -157,7 +157,7 @@ export default async function RenewalsPage() {
               <th className="text-left px-3 py-2 font-medium">Student</th>
               <th className="text-left px-3 py-2 font-medium">Valid until</th>
               <th className="text-left px-3 py-2 font-medium">Status</th>
-              <th className="text-left px-3 py-2 font-medium">Paid / Fee</th>
+              <th className="text-left px-3 py-2 font-medium">Monthly fee · Paid</th>
               <th className="text-left px-3 py-2 font-medium">Parent</th>
               <th className="text-left px-3 py-2 font-medium">Action</th>
             </tr>
@@ -195,11 +195,6 @@ export default async function RenewalsPage() {
                     >
                       {r.valid_until}
                     </span>
-                    {partial && (
-                      <span className="block text-xs text-amber-700 mt-0.5">
-                        Partial pay
-                      </span>
-                    )}
                   </td>
                   <td className="px-3 py-2">
                     {markExpiredCard ? (
@@ -217,8 +212,45 @@ export default async function RenewalsPage() {
                     )}
                   </td>
                   <td className="px-3 py-2 text-xs">
-                    {formatCurrency(Number(r.amount_paid || 0))} /{" "}
-                    {formatCurrency(Number(r.amount || 0))}
+                    <div className="space-y-0.5">
+                      <div>
+                        <span className="text-gray-500">Monthly fee </span>
+                        <span className="font-semibold text-gray-900">
+                          {formatCurrency(Number(r.amount || 0))}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Paid </span>
+                        <span className="font-semibold text-green-700">
+                          {formatCurrency(Number(r.amount_paid || 0))}
+                        </span>
+                      </div>
+                      {partial ? (
+                        <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800">
+                          Partial pay
+                          {Number(r.amount || 0) > 0
+                            ? ` · ~${Math.max(
+                                1,
+                                Math.round(
+                                  (Number(r.amount_paid || 0) /
+                                    Number(r.amount || 1)) *
+                                    30
+                                )
+                              )} days`
+                            : ""}
+                        </span>
+                      ) : Number(r.amount_paid || 0) >=
+                        Number(r.amount || 0) &&
+                        Number(r.amount || 0) > 0 ? (
+                        <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-800">
+                          Fully paid
+                        </span>
+                      ) : (
+                        <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-600">
+                          Not paid yet
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-3 py-2 text-xs">
                     {st?.parent_phone || "—"}
