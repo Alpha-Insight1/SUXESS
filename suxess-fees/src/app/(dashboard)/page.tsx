@@ -902,12 +902,6 @@ export default async function DashboardPage() {
             >
               Outstanding
             </Link>
-            <Link
-              href="/ai"
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-brand-green/30 bg-brand-green/5 text-sm font-medium text-brand-green hover:bg-brand-green/10"
-            >
-              Alpha
-            </Link>
           </div>
         )}
       </div>

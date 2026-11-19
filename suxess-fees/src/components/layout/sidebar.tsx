@@ -25,12 +25,9 @@ import {
   Menu,
   X,
   UserCheck,
-  MessageCircle,
-  Sparkles,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import { MessagesUnreadBadge } from "@/components/messages/unread-badge";
 
 type NavItem = {
   href: string;
@@ -41,9 +38,7 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, show: "all" },
-  { href: "/ai", label: "Alpha", icon: Sparkles, show: "admin" },
   { href: "/attendance", label: "Daily Attendance", icon: UserCheck, show: "all" },
-  { href: "/messages", label: "Messages", icon: MessageCircle, show: "all" },
   { href: "/payments", label: "Record Payment", icon: CreditCard, show: "all" },
   { href: "/outstanding", label: "Outstanding", icon: AlertCircle, show: "main" },
   { href: "/fee-tracker", label: "Fees Tracker", icon: ListChecks, show: "main" },
@@ -171,7 +166,6 @@ export function Sidebar({
             >
               <item.icon className="w-5 h-5 shrink-0" />
               <span className="truncate flex-1">{item.label}</span>
-              {item.href === "/messages" && <MessagesUnreadBadge />}
             </Link>
           );
         })}
