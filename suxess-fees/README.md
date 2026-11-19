@@ -82,3 +82,41 @@ School logo is at `public/logo.png`.
 ## License
 
 Private – for Suxess Schools use only.
+
+## New features (attendance + messages)
+
+After deploying code, run in Supabase SQL Editor:
+
+1. `migration-daily-attendance-messages.sql` — creates `daily_attendance`, chat tables, and RLS.
+2. Storage: create a **public** bucket named `chat-voice` (Storage → New bucket). Allow authenticated users to upload and public/authenticated read.
+
+### Daily attendance
+- Secretaries: **Daily Attendance** in the sidebar — enter how many students were present today.
+- Director: top of the Dashboard shows present counts for each branch for today.
+
+### Card renewals
+- Long lists (Still valid, Due today, Expired, Older expired) are **collapsible** so the page stays neat. Urgent lists open by default when short.
+
+### Messages
+- **Messages** in the sidebar (all users).
+- Director can start a chat with any secretary; text + voice notes.
+- Realtime updates via Supabase Realtime (enable replication on `chat_messages` if needed).
+
+### Attendance (Main vs Tutorial)
+- **Suxess School (Main)** secretary: enter **present count per class**. Totals + class breakdown show on the director dashboard.
+- **Arepo / Ofada Mowe**: single total only (unchanged).
+- Run `migration-attendance-class-breakdown.sql` to add the `class_breakdown` JSON column.
+
+### Message read status
+- Unread badge on **Messages** in the sidebar and in the chat list.
+- On your own messages: single check = sent, double check + “Seen” = the other person opened the chat.
+- Enable Realtime on `chat_messages` and `chat_participants` in Supabase for live updates.
+
+
+## Alpha (Director AI)
+
+Admin-only assistant at **/ai**.
+
+- Answers from **live Supabase data** (card renewals by branch, attendance, payments, outstanding, exams, students).
+- Works **without** an API key via built-in data tools.
+- For natural chat, set `XAI_API_KEY` (Grok) or `OPENAI_API_KEY` in `.env.local` / Vercel.

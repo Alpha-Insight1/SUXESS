@@ -4,6 +4,7 @@ import { formatCurrency } from "@/lib/utils";
 import { getCurrentProfile, campusFilter, isAdmin } from "@/lib/auth";
 import Link from "next/link";
 import { RenewCardButton } from "@/components/renewals/renew-card-button";
+import { CollapsibleSection } from "@/components/ui/collapsible-section";
 
 function isoToday() {
   return new Date().toISOString().slice(0, 10);
@@ -315,52 +316,70 @@ export default async function RenewalsPage() {
             </div>
           </div>
         </div>
-        <div className="p-4 space-y-4">
-          <div className="rounded-xl border-2 border-red-200 bg-red-50/40 p-3">
-            <h3 className="text-sm font-bold text-red-800 mb-1">
-              Expired card — last 3 days ({expiredRecentItems.length})
-            </h3>
-            <p className="text-xs text-red-700 mb-2">
-              These cards expired within the last 3 days. Contact parent to renew.
-            </p>
-            <SectionTable
-              items={expiredRecentItems}
-              badge="bg-red-100 text-red-800"
-              markExpiredCard
-            />
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-amber-800 mb-2">
-              Due today ({dueTodayItems.length})
-            </h3>
-            <SectionTable
-              items={dueTodayItems}
-              badge="bg-amber-100 text-amber-900"
-            />
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-green-800 mb-2">
-              Still valid ({valid.length})
-            </h3>
-            <SectionTable
-              items={valid}
-              badge="bg-green-100 text-green-800"
-            />
-          </div>
-          {expiredOlderItems.length > 0 && (
-            <div className="opacity-90">
-              <h3 className="text-sm font-semibold text-gray-600 mb-2">
-                Older expired (over 3 days) ({expiredOlderItems.length})
-              </h3>
-              <p className="text-xs text-gray-500 mb-2">
-                Still marked Expired card — follow up if needed.
-              </p>
+        <div className="p-4 space-y-3">
+          <CollapsibleSection
+            title={
+              <span className="text-red-800">
+                Expired card — last 3 days
+              </span>
+            }
+            subtitle="Contact parent to renew"
+            count={expiredRecentItems.length}
+            defaultOpen={expiredRecentItems.length > 0 && expiredRecentItems.length <= 15}
+            headerClassName="bg-red-50/60"
+          >
+            <div className="p-2">
               <SectionTable
-                items={expiredOlderItems}
-                badge="bg-gray-200 text-gray-700"
+                items={expiredRecentItems}
+                badge="bg-red-100 text-red-800"
                 markExpiredCard
               />
             </div>
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title={<span className="text-amber-900">Due today</span>}
+            count={dueTodayItems.length}
+            defaultOpen={dueTodayItems.length > 0 && dueTodayItems.length <= 15}
+            headerClassName="bg-amber-50/50"
+          >
+            <div className="p-2">
+              <SectionTable
+                items={dueTodayItems}
+                badge="bg-amber-100 text-amber-900"
+              />
+            </div>
+          </CollapsibleSection>
+
+          <CollapsibleSection
+            title={<span className="text-green-800">Still valid</span>}
+            count={valid.length}
+            defaultOpen={false}
+            headerClassName="bg-green-50/40"
+          >
+            <div className="p-2">
+              <SectionTable
+                items={valid}
+                badge="bg-green-100 text-green-800"
+              />
+            </div>
+          </CollapsibleSection>
+
+          {expiredOlderItems.length > 0 && (
+            <CollapsibleSection
+              title={<span className="text-gray-700">Older expired (over 3 days)</span>}
+              subtitle="Still marked Expired card — follow up if needed"
+              count={expiredOlderItems.length}
+              defaultOpen={false}
+            >
+              <div className="p-2">
+                <SectionTable
+                  items={expiredOlderItems}
+                  badge="bg-gray-200 text-gray-700"
+                  markExpiredCard
+                />
+              </div>
+            </CollapsibleSection>
           )}
         </div>
       </div>

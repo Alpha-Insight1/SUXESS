@@ -399,6 +399,16 @@ export default async function DashboardPage() {
     recentPayQ,
   ]);
 
+  // Today's attendance per campus (for director overview at top of dashboard)
+  const { data: attendanceToday } = admin
+    ? await supabase
+        .from("daily_attendance")
+        .select(
+          "campus_id, present_count, total_enrolled, notes, class_breakdown, campuses(short_name, name)"
+        )
+        .eq("attendance_date", today)
+    : { data: null as any[] | null };
+
   const outstanding = (outstandingRaw || []).filter((f: any) => {
     const st = Array.isArray(f.students) ? f.students[0] : f.students;
     const c = Array.isArray(st?.campuses) ? st?.campuses[0] : st?.campuses;
@@ -875,9 +885,105 @@ export default async function DashboardPage() {
             >
               Outstanding
             </Link>
+            <Link
+              href="/ai"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-brand-green/30 bg-brand-green/5 text-sm font-medium text-brand-green hover:bg-brand-green/10"
+            >
+              Alpha
+            </Link>
           </div>
         )}
       </div>
+
+      {/* Director: today's present students per branch */}
+      {admin && (
+        <div className="mb-6">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">
+                Today&apos;s attendance
+              </h2>
+              <p className="text-sm text-gray-500">
+                Students present by branch · {today}
+              </p>
+            </div>
+            <Link
+              href="/attendance"
+              className="text-sm font-medium text-brand-green hover:underline"
+            >
+              View / enter →
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {(campuses || []).map((c: any) => {
+              const row = (attendanceToday || []).find(
+                (a: any) => a.campus_id === c.id
+              );
+              const campLabel = c.short_name || c.name;
+              return (
+                <div
+                  key={c.id}
+                  className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex items-center gap-3"
+                >
+                  <div className="p-2.5 rounded-lg bg-brand-green/10 text-brand-green">
+                    <Users className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-gray-500 truncate">
+                      {campLabel}
+                    </p>
+                    {row ? (
+                      <>
+                        <p className="text-2xl font-bold text-gray-900">
+                          {row.present_count}
+                          <span className="text-sm font-normal text-gray-500 ml-1">
+                            present
+                          </span>
+                        </p>
+                        {row.total_enrolled != null && (
+                          <p className="text-[11px] text-gray-400">
+                            of {row.total_enrolled} enrolled
+                          </p>
+                        )}
+                        {row.class_breakdown &&
+                          typeof row.class_breakdown === "object" &&
+                          Object.keys(row.class_breakdown).length > 0 && (
+                            <ul className="mt-1.5 text-[11px] text-gray-600 space-y-0.5 border-t border-gray-100 pt-1.5">
+                              {Object.entries(
+                                row.class_breakdown as Record<string, number>
+                              )
+                                .sort(([a], [b]) => a.localeCompare(b))
+                                .map(([cls, n]) => (
+                                  <li
+                                    key={cls}
+                                    className="flex justify-between gap-2"
+                                  >
+                                    <span className="truncate">{cls}</span>
+                                    <span className="font-semibold shrink-0">
+                                      {n as number}
+                                    </span>
+                                  </li>
+                                ))}
+                            </ul>
+                          )}
+                      </>
+                    ) : (
+                      <p className="text-sm text-amber-600 font-medium mt-0.5">
+                        Not submitted
+                      </p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            {(!campuses || campuses.length === 0) && (
+              <p className="text-sm text-gray-500 col-span-full">
+                No campuses found.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Overdue exam deadlines — blink for admin + main */}
       {(admin || isMainSec) && overdueExams.length > 0 && (
