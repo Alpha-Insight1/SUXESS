@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { createClient } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/utils";
 import { getCurrentProfile, campusFilter, isAdmin } from "@/lib/auth";
@@ -399,15 +401,30 @@ export default async function DashboardPage() {
     recentPayQ,
   ]);
 
-  // Today's attendance per campus (for director overview at top of dashboard)
-  const { data: attendanceToday } = admin
-    ? await supabase
+  // Today's attendance per campus (safe if table/column missing)
+  let attendanceToday: any[] | null = null;
+  if (admin) {
+    try {
+      const att = await supabase
         .from("daily_attendance")
         .select(
-          "campus_id, present_count, total_enrolled, notes, class_breakdown, campuses(short_name, name)"
+          "campus_id, present_count, total_enrolled, notes, class_breakdown"
         )
-        .eq("attendance_date", today)
-    : { data: null as any[] | null };
+        .eq("attendance_date", today);
+      if (!att.error) {
+        attendanceToday = att.data || [];
+      } else {
+        // Retry without class_breakdown (migration not applied yet)
+        const att2 = await supabase
+          .from("daily_attendance")
+          .select("campus_id, present_count, total_enrolled, notes")
+          .eq("attendance_date", today);
+        if (!att2.error) attendanceToday = att2.data || [];
+      }
+    } catch {
+      attendanceToday = null;
+    }
+  }
 
   const outstanding = (outstandingRaw || []).filter((f: any) => {
     const st = Array.isArray(f.students) ? f.students[0] : f.students;
@@ -960,7 +977,7 @@ export default async function DashboardPage() {
                                   >
                                     <span className="truncate">{cls}</span>
                                     <span className="font-semibold shrink-0">
-                                      {n as number}
+                                      {String(n)}
                                     </span>
                                   </li>
                                 ))}

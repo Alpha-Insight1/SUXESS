@@ -72,7 +72,7 @@ export default async function DashboardLayout({
           </p>
         </div>
       </main>
-      <FloatingAssist isAdmin={admin} />
+      <FloatingAssist isAdmin={!!admin} />
     </div>
   );
 }

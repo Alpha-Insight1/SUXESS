@@ -38,6 +38,12 @@ export default function Error({
             ? "No internet connection or the server could not be reached. Check your network and try again."
             : "The page could not load. Please try again. If it keeps happening, contact support."}
         </p>
+        {error?.digest ? (
+          <p className="text-[10px] text-gray-400 mt-3 font-mono">Ref: {error.digest}</p>
+        ) : null}
+        {error?.message ? (
+          <p className="text-[11px] text-red-700 mt-2 break-words bg-red-50 border border-red-100 rounded-lg p-2 text-left">{error.message}</p>
+        ) : null}
         <button
           type="button"
           onClick={() => reset()}
