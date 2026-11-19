@@ -1,5 +1,6 @@
 import { Sidebar } from "@/components/layout/sidebar";
 import { PrivacyModeButton, PrivacyModeInit } from "@/components/layout/privacy-mode";
+import { FloatingAssist } from "@/components/layout/floating-assist";
 import { getCurrentProfile, isAdmin } from "@/lib/auth";
 
 function campusKind(profile: Awaited<ReturnType<typeof getCurrentProfile>>) {
@@ -71,6 +72,7 @@ export default async function DashboardLayout({
           </p>
         </div>
       </main>
+      <FloatingAssist isAdmin={admin} />
     </div>
   );
 }
