@@ -1,7 +1,24 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile, isAdmin } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { ChatPanel } from "@/components/messages/chat-panel";
+import {
+  ChatPanel,
+  type ChatContact,
+  type ChatConversation,
+} from "@/components/messages/chat-panel";
+
+function isAdminRole(role?: string | null) {
+  const r = String(role || "")
+    .trim()
+    .toLowerCase();
+  return ["admin", "director", "owner", "administrator"].includes(r);
+}
+
+function campusLabel(campuses: any): string {
+  if (!campuses) return "";
+  const c = Array.isArray(campuses) ? campuses[0] : campuses;
+  return `${c?.short_name || c?.name || ""}`.trim();
+}
 
 export default async function MessagesPage() {
   const supabase = await createClient();
@@ -10,123 +27,168 @@ export default async function MessagesPage() {
 
   const admin = isAdmin(profile);
 
-  // Conversations this user is in
-  const { data: parts } = await supabase
-    .from("chat_participants")
-    .select("conversation_id, last_read_at")
-    .eq("user_id", profile.id);
+  // Probe whether chat tables exist
+  const probe = await supabase
+    .from("chat_conversations")
+    .select("id")
+    .limit(1);
+  const tablesReady = !probe.error;
+  const loadError = probe.error
+    ? `Database: ${probe.error.message}`
+    : null;
 
-  const convIds = (parts || []).map((p) => p.conversation_id);
+  // ——— Staff directory ———
+  // Admin sees secretaries; secretaries see directors/admins
+  let contacts: ChatContact[] = [];
+  const { data: allProfiles, error: profilesError } = await supabase
+    .from("profiles")
+    .select("id, full_name, role, campus_id, campuses(short_name, name)")
+    .neq("id", profile.id);
 
-  let conversations: {
-    id: string;
-    title: string | null;
-    campus_id: string | null;
-    other_name?: string;
-    other_id?: string;
-    unread?: number;
-  }[] = [];
+  if (profilesError) {
+    // Fallback: try without join
+    const { data: plain } = await supabase
+      .from("profiles")
+      .select("id, full_name, role, campus_id")
+      .neq("id", profile.id);
+    const rows = plain || [];
+    contacts = rows
+      .filter((p) =>
+        admin ? !isAdminRole(p.role) : isAdminRole(p.role)
+      )
+      .map((p) => ({
+        id: p.id,
+        full_name: p.full_name,
+        role: p.role || "secretary",
+        campus_label: "",
+      }));
+  } else {
+    contacts = (allProfiles || [])
+      .filter((p) =>
+        admin ? !isAdminRole(p.role) : isAdminRole(p.role)
+      )
+      .map((p: any) => ({
+        id: p.id,
+        full_name: p.full_name,
+        role: p.role || "secretary",
+        campus_label: campusLabel(p.campuses),
+      }))
+      .sort((a, b) =>
+        (a.full_name || a.campus_label).localeCompare(
+          b.full_name || b.campus_label
+        )
+      );
+  }
 
-  if (convIds.length > 0) {
-    const { data: convs } = await supabase
-      .from("chat_conversations")
-      .select("id, title, campus_id")
-      .in("id", convIds)
-      .order("updated_at", { ascending: false });
+  // ——— Existing conversations ———
+  let conversations: ChatConversation[] = [];
 
-    // Load other participants
-    const { data: allParts } = await supabase
+  if (tablesReady) {
+    const { data: parts } = await supabase
       .from("chat_participants")
-      .select("conversation_id, user_id")
-      .in("conversation_id", convIds);
+      .select("conversation_id, last_read_at")
+      .eq("user_id", profile.id);
 
-    const otherIds = new Set<string>();
-    for (const p of allParts || []) {
-      if (p.user_id !== profile.id) otherIds.add(p.user_id);
-    }
-    const { data: otherProfiles } = otherIds.size
-      ? await supabase
-          .from("profiles")
-          .select("id, full_name, campus_id, campuses(short_name, name)")
-          .in("id", Array.from(otherIds))
-      : { data: [] as any[] };
-
-    const profileMap = new Map(
-      (otherProfiles || []).map((p: any) => [p.id, p])
+    const convIds = (parts || []).map((p) => p.conversation_id);
+    const partMap = new Map(
+      (parts || []).map((p) => [p.conversation_id, p.last_read_at as string | null])
     );
 
-    conversations = (convs || []).map((c) => {
-      const others = (allParts || []).filter(
-        (p) => p.conversation_id === c.id && p.user_id !== profile.id
+    if (convIds.length > 0) {
+      const { data: convs } = await supabase
+        .from("chat_conversations")
+        .select("id, title, campus_id, updated_at")
+        .in("id", convIds)
+        .order("updated_at", { ascending: false });
+
+      const { data: allParts } = await supabase
+        .from("chat_participants")
+        .select("conversation_id, user_id")
+        .in("conversation_id", convIds);
+
+      const otherIds = new Set<string>();
+      for (const p of allParts || []) {
+        if (p.user_id !== profile.id) otherIds.add(p.user_id);
+      }
+
+      const profileMap = new Map(
+        (allProfiles || []).map((p: any) => [p.id, p])
       );
-      const other = others[0] ? profileMap.get(others[0].user_id) : null;
-      const camp = other?.campuses
-        ? Array.isArray(other.campuses)
-          ? other.campuses[0]
-          : other.campuses
-        : null;
-      return {
-        id: c.id,
-        title: c.title,
-        campus_id: c.campus_id,
-        other_id: others[0]?.user_id,
-        other_name:
-          other?.full_name ||
-          (camp ? camp.short_name || camp.name : null) ||
-          c.title ||
-          "Chat",
-      };
-    });
-  }
+      // Ensure we have names for participants not in filtered contacts
+      if (otherIds.size) {
+        const missing = Array.from(otherIds).filter((id) => !profileMap.has(id));
+        if (missing.length) {
+          const { data: extra } = await supabase
+            .from("profiles")
+            .select("id, full_name, role, campuses(short_name, name)")
+            .in("id", missing);
+          for (const p of extra || []) {
+            profileMap.set(p.id, p);
+          }
+        }
+      }
 
-  // Unread counts (messages from others after last_read_at)
-  const partMap = new Map(
-    (parts || []).map((p: any) => [
-      p.conversation_id as string,
-      p.last_read_at as string | null,
-    ])
-  );
-  for (let i = 0; i < conversations.length; i++) {
-    const c = conversations[i];
-    const lastRead = partMap.get(c.id) || null;
-    let q = supabase
-      .from("chat_messages")
-      .select("id", { count: "exact", head: true })
-      .eq("conversation_id", c.id)
-      .neq("sender_id", profile.id);
-    if (lastRead) q = q.gt("created_at", lastRead);
-    const { count } = await q;
-    conversations[i] = { ...c, unread: count || 0 };
-  }
+      conversations = await Promise.all(
+        (convs || []).map(async (c) => {
+          const others = (allParts || []).filter(
+            (p) => p.conversation_id === c.id && p.user_id !== profile.id
+          );
+          const otherId = others[0]?.user_id;
+          const other = otherId ? profileMap.get(otherId) : null;
+          const lastRead = partMap.get(c.id) || null;
 
-  // Secretaries list for admin to start chats
-  let secretaries: {
-    id: string;
-    full_name: string | null;
-    campus_label: string;
-  }[] = [];
-  if (admin) {
-    const { data: secs } = await supabase
-      .from("profiles")
-      .select("id, full_name, campus_id, campuses(short_name, name)")
-      .eq("role", "secretary");
-    secretaries = (secs || []).map((s: any) => {
-      const camp = Array.isArray(s.campuses) ? s.campuses[0] : s.campuses;
-      return {
-        id: s.id,
-        full_name: s.full_name,
-        campus_label: camp?.short_name || camp?.name || "",
-      };
-    });
+          let unread = 0;
+          let lastPreview: string | undefined;
+          {
+            let q = supabase
+              .from("chat_messages")
+              .select("id", { count: "exact", head: true })
+              .eq("conversation_id", c.id)
+              .neq("sender_id", profile.id);
+            if (lastRead) q = q.gt("created_at", lastRead);
+            const { count } = await q;
+            unread = count || 0;
+          }
+          {
+            const { data: lastMsg } = await supabase
+              .from("chat_messages")
+              .select("body, voice_url, created_at")
+              .eq("conversation_id", c.id)
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            if (lastMsg) {
+              lastPreview = lastMsg.body || (lastMsg.voice_url ? "Voice note" : "");
+            }
+          }
+
+          return {
+            id: c.id,
+            title: c.title,
+            other_id: otherId,
+            other_name:
+              other?.full_name ||
+              campusLabel(other?.campuses) ||
+              c.title ||
+              "Chat",
+            other_campus: campusLabel(other?.campuses),
+            unread,
+            last_preview: lastPreview,
+            updated_at: c.updated_at,
+          } as ChatConversation;
+        })
+      );
+    }
   }
 
   return (
     <div>
-      <div className="mb-6">
+      <div className="mb-5">
         <h1 className="text-2xl font-bold text-gray-900">Messages</h1>
         <p className="text-gray-500 mt-1">
-          Chat between director and secretaries. Text and voice notes are
-          supported. Available from every dashboard.
+          {admin
+            ? "Message any campus secretary. Unread badges and Seen status update when they open the chat."
+            : "Message the director. You will see a Seen mark when your message is opened."}
         </p>
       </div>
       <ChatPanel
@@ -134,13 +196,13 @@ export default async function MessagesPage() {
         currentUserName={profile.full_name || "You"}
         isAdmin={admin}
         initialConversations={conversations}
-        secretaries={secretaries}
+        contacts={contacts}
+        tablesReady={tablesReady}
+        loadError={
+          loadError ||
+          (profilesError ? `Profiles: ${profilesError.message}` : null)
+        }
       />
-      <p className="text-xs text-gray-400 mt-4">
-        Voice notes need a Supabase Storage bucket named{" "}
-        <code className="bg-gray-100 px-1 rounded">chat-voice</code> (public
-        read + authenticated upload). Run the SQL migration for tables first.
-      </p>
     </div>
   );
 }
