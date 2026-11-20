@@ -25,17 +25,19 @@ export default async function AiAssistantPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Alpha</h1>
         <p className="text-gray-500 mt-1">
-          Alpha answers fast questions about the school — card renewals by branch,
-          attendance, payments, outstanding fees, exam registration, and more.
-          Answers use live data from Suxess Fees.
+          Alpha can read all of the school&apos;s data — students, cards, fees,
+          payments, expenses, staff, attendance, messages, secretary activity
+          and more. If Alpha cannot find an accurate answer, it will tell you
+          instead of guessing.
         </p>
       </div>
       <AdminAiChat />
       <p className="text-xs text-gray-400 mt-4">
-        Optional: set <code className="bg-gray-100 px-1 rounded">XAI_API_KEY</code>{" "}
-        or <code className="bg-gray-100 px-1 rounded">OPENAI_API_KEY</code> in
-        environment for full natural-language AI. Without a key, the assistant
-        still answers common questions from live database tools.
+        To let Alpha answer any question in natural language, set{" "}
+        <code className="bg-gray-100 px-1 rounded">XAI_API_KEY</code> or{" "}
+        <code className="bg-gray-100 px-1 rounded">OPENAI_API_KEY</code> in the
+        environment. Without a key, Alpha only understands common keywords and
+        will say when it does not have accurate information.
       </p>
     </div>
   );

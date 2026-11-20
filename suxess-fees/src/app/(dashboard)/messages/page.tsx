@@ -80,6 +80,20 @@ export default async function MessagesPage() {
       );
   }
 
+  // Online status (needs migration-secretary-activity.sql; ignored if missing)
+  if (contacts.length) {
+    const { data: seen, error: seenErr } = await supabase
+      .from("profiles")
+      .select("id, last_seen_at")
+      .in("id", contacts.map((c) => c.id));
+    if (!seenErr && seen) {
+      const seenMap = new Map<string, string | null>(
+        seen.map((r: any): [string, string | null] => [r.id, r.last_seen_at ?? null])
+      );
+      contacts = contacts.map((c) => ({ ...c, last_seen_at: seenMap.get(c.id) ?? null }));
+    }
+  }
+
   // ——— Existing conversations ———
   let conversations: ChatConversation[] = [];
 

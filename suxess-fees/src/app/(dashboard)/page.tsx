@@ -22,6 +22,12 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { ExportAllData } from "@/components/admin/export-all-data";
+import { NewMessageAlert } from "@/components/messages/new-message-alert";
+import {
+  SecretaryActivity,
+  type SecretaryRow,
+} from "@/components/dashboard/secretary-activity";
+import { fetchActiveCardStudents } from "@/lib/active-students";
 
 function isoDate(d: Date) {
   return d.toISOString().slice(0, 10);
@@ -426,6 +432,65 @@ export default async function DashboardPage() {
     }
   }
 
+  // Tutorial centres: a student is ACTIVE only while their card is still valid.
+  const activeCards = await fetchActiveCardStudents(supabase, today, campusId);
+  const tutorialCampusIds = new Set(
+    (campuses || [])
+      .filter((c: any) => isTutorialCampus(c.short_name, c.name))
+      .map((c: any) => c.id as string)
+  );
+  // Secretary tutorial desk → its own campus is a tutorial campus
+  if (isTutorialSec && profile?.campus_id) tutorialCampusIds.add(profile.campus_id);
+  const activeCardCountByCampus = new Map<string, number>();
+  for (const c of activeCards.values()) {
+    if (!c.campus_id || !tutorialCampusIds.has(c.campus_id)) continue;
+    activeCardCountByCampus.set(
+      c.campus_id,
+      (activeCardCountByCampus.get(c.campus_id) || 0) + 1
+    );
+  }
+  const activeCardTotal = Array.from(activeCardCountByCampus.values()).reduce(
+    (a, b) => a + b,
+    0
+  );
+
+  // Director: secretary activity (online / last seen)
+  let secretaryRows: SecretaryRow[] = [];
+  let activityMigrationMissing = false;
+  if (admin) {
+    let pr = await supabase
+      .from("profiles")
+      .select("id, full_name, role, campus_id, last_seen_at, campuses(short_name, name)");
+    if (pr.error) {
+      activityMigrationMissing = true;
+      pr = (await supabase
+        .from("profiles")
+        .select("id, full_name, role, campus_id, campuses(short_name, name)")) as any;
+    }
+    const submittedCampuses = new Set(
+      (attendanceToday || []).map((r: any) => r.campus_id as string)
+    );
+    secretaryRows = ((pr.data || []) as any[])
+      .filter(
+        (p) =>
+          !["admin", "director", "owner", "administrator"].includes(
+            String(p.role || "").trim().toLowerCase()
+          )
+      )
+      .map((p) => {
+        const c = Array.isArray(p.campuses) ? p.campuses[0] : p.campuses;
+        return {
+          id: p.id as string,
+          name: (p.full_name as string) || c?.short_name || c?.name || "Secretary",
+          campus: (c?.short_name || c?.name || "") as string,
+          last_seen_at: (p.last_seen_at as string | null) ?? null,
+          attendance_submitted: p.campus_id
+            ? submittedCampuses.has(p.campus_id as string)
+            : null,
+        };
+      });
+  }
+
   const outstanding = (outstandingRaw || []).filter((f: any) => {
     const st = Array.isArray(f.students) ? f.students[0] : f.students;
     const c = Array.isArray(st?.campuses) ? st?.campuses[0] : st?.campuses;
@@ -489,6 +554,11 @@ export default async function DashboardPage() {
 
   const payingStudentIds = new Set<string>();
   for (const row of (paidFeesRows || []) as any[]) {
+    // Tutorial students are counted by card validity, not by fees paid
+    {
+      const st0 = Array.isArray(row.students) ? row.students[0] : row.students;
+      if (st0?.campus_id && tutorialCampusIds.has(st0.campus_id)) continue;
+    }
     const ft = Array.isArray(row.fee_types) ? row.fee_types[0] : row.fee_types;
     const n = String(ft?.name || "").toLowerCase();
     const isSchoolOrTuition =
@@ -500,7 +570,8 @@ export default async function DashboardPage() {
     const sid = String(row.student_id || st?.id || "");
     if (sid) payingStudentIds.add(sid);
   }
-  const totalStudents = payingStudentIds.size;
+  // Main school: paid fees/tuition at least once. Tutorial centres: card still valid.
+  const totalStudents = payingStudentIds.size + activeCardTotal;
   const registeredTotal = registeredStudents ?? 0;
   const totalOutstanding = outstanding.reduce(
     (s: number, f: any) => s + Number(f.balance || 0),
@@ -673,7 +744,13 @@ export default async function DashboardPage() {
 
   for (const s of studentRows || []) {
     const id = s.campus_id as string;
-    if (id && snaps.has(id)) snaps.get(id)!.students += 1;
+    if (!id || !snaps.has(id)) continue;
+    // Tutorial campuses are counted below from valid cards only
+    if (tutorialCampusIds.has(id)) continue;
+    snaps.get(id)!.students += 1;
+  }
+  for (const [id, n] of activeCardCountByCampus) {
+    if (snaps.has(id)) snaps.get(id)!.students = n;
   }
   for (const p of todayPayments || []) {
     const id = (p.students as any)?.campus_id;
@@ -739,6 +816,7 @@ export default async function DashboardPage() {
     const camp = Array.isArray(s.campuses) ? s.campuses[0] : s.campuses;
     const tut = isTutorialCampus(camp?.short_name, camp?.name);
     if (tut || isTutorial) {
+      if (!activeCards.has(String(s.id))) continue; // card expired → not active
       const ex = String(s.exam_preparing_for || "Not set").trim() || "Not set";
       examMap.set(ex, (examMap.get(ex) || 0) + 1);
     } else {
@@ -905,6 +983,17 @@ export default async function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* New message alert (everyone) */}
+      <NewMessageAlert />
+
+      {/* Director: which secretaries are online / active */}
+      {admin && (
+        <SecretaryActivity
+          initial={secretaryRows}
+          migrationMissing={activityMigrationMissing}
+        />
+      )}
 
       {/* Director: today's present students per branch */}
       {admin && (
@@ -1387,7 +1476,7 @@ export default async function DashboardPage() {
                 {totalStudents ?? 0}
               </p>
               <p className="text-xs text-gray-400 mt-1">
-                {registeredTotal} registered
+                {registeredTotal} registered · tutorial = valid card
               </p>
             </div>
             <div className="bg-white rounded-2xl border border-red-100 shadow-sm p-5">
@@ -1555,7 +1644,9 @@ export default async function DashboardPage() {
                 </div>
                 <div className="p-5 space-y-3 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-gray-500">Students</span>
+                    <span className="text-gray-500">
+                      {c.tutorial ? "Active students (valid card)" : "Students"}
+                    </span>
                     <span className="font-semibold">{c.students}</span>
                   </div>
                   <div className="flex justify-between">
@@ -1917,7 +2008,11 @@ export default async function DashboardPage() {
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-8">
             <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-              <p className="text-sm text-gray-500">Active students (paid fees/tuition)</p>
+              <p className="text-sm text-gray-500">
+                {isTutorialSec
+                  ? "Active students (card still valid)"
+                  : "Active students (paid fees/tuition)"}
+              </p>
               <p className="text-2xl font-bold mt-1">{totalStudents ?? 0}</p>
               <p className="text-xs text-gray-400 mt-1">{registeredTotal} registered</p>
             </div>

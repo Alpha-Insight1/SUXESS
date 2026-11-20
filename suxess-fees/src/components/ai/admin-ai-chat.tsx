@@ -6,13 +6,14 @@ import { Bot, Loader2, Send, Sparkles } from "lucide-react";
 type Msg = { role: "user" | "assistant"; content: string };
 
 const SUGGESTIONS = [
-  "How many students renewed their card in Arepo?",
-  "Card renewals status for Ofada Mowe",
-  "How many students were present today in each branch?",
+  "How many active students are in Arepo and Ofada Mowe?",
+  "Which secretaries are online right now?",
+  "Do I have any unread messages?",
+  "How many cards expire today?",
   "Payments collected today and this month",
-  "How many active students at Main?",
-  "Outstanding fees summary",
-  "Exam registration pending board?",
+  "Who are the biggest debtors at Main?",
+  "Exam registrations pending board?",
+  "Show active staff and total salaries",
 ];
 
 export function AdminAiChat() {
@@ -77,7 +78,7 @@ export function AdminAiChat() {
         <div className="min-w-0 flex-1">
           <p className="font-semibold text-sm">Alpha</p>
           <p className="text-[11px] text-green-100 truncate">
-            Ask about renewals, attendance, payments, students…
+            Ask anything about the school's data…
           </p>
         </div>
         {mode && (

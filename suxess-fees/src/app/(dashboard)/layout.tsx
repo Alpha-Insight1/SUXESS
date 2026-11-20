@@ -2,6 +2,8 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { PrivacyModeButton, PrivacyModeInit } from "@/components/layout/privacy-mode";
 import { FloatingAssist } from "@/components/layout/floating-assist";
 import { getCurrentProfile, isAdmin } from "@/lib/auth";
+import { UnreadProvider } from "@/components/messages/unread-provider";
+import { ActivityHeartbeat } from "@/components/layout/activity-heartbeat";
 
 function campusKind(profile: Awaited<ReturnType<typeof getCurrentProfile>>) {
   const label = `${profile?.campuses?.short_name || ""} ${
@@ -48,7 +50,9 @@ export default async function DashboardLayout({
     profile?.campuses?.short_name || profile?.campuses?.name || undefined;
 
   return (
+    <UnreadProvider>
     <div className="min-h-screen bg-gray-50">
+      <ActivityHeartbeat />
       <Sidebar
         roleLabel={roleLabel}
         campusLabel={campusLabel}
@@ -74,5 +78,6 @@ export default async function DashboardLayout({
       </main>
       <FloatingAssist isAdmin={!!admin} />
     </div>
+    </UnreadProvider>
   );
 }

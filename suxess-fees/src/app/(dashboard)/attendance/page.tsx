@@ -3,6 +3,7 @@ import { getCurrentProfile, campusFilter, isAdmin } from "@/lib/auth";
 import { AttendanceForm } from "@/components/attendance/attendance-form";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { fetchActiveCardStudents, lagosToday } from "@/lib/active-students";
 
 function isoToday() {
   return new Date().toISOString().slice(0, 10);
@@ -71,11 +72,21 @@ export default async function AttendancePage() {
       campusFullName = camp.name;
     }
 
-    const { data: students } = await supabase
+    let { data: students } = await supabase
       .from("students")
-      .select("class_name")
+      .select("id, class_name")
       .eq("status", "active")
       .eq("campus_id", targetCampusId);
+
+    // Tutorial centres: only students whose card is still valid count as enrolled
+    if (isTutorialLabel(campusShort, campusFullName)) {
+      const cards = await fetchActiveCardStudents(
+        supabase,
+        lagosToday(),
+        targetCampusId
+      );
+      students = (students || []).filter((s: any) => cards.has(String(s.id)));
+    }
 
     const classMap = new Map<string, number>();
     for (const s of students || []) {

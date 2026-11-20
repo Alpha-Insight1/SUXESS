@@ -25,19 +25,24 @@ import {
   Menu,
   X,
   UserCheck,
+  MessageCircle,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import { MessagesUnreadBadge } from "@/components/messages/unread-badge";
+import { useUnreadMessages } from "@/components/messages/unread-provider";
 
 type NavItem = {
   href: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   show?: "all" | "admin" | "main" | "tutorial";
+  badge?: "messages";
 };
 
 const navItems: NavItem[] = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard, show: "all" },
+  { href: "/messages", label: "Messages", icon: MessageCircle, show: "all", badge: "messages" },
   { href: "/attendance", label: "Daily Attendance", icon: UserCheck, show: "all" },
   { href: "/payments", label: "Record Payment", icon: CreditCard, show: "all" },
   { href: "/outstanding", label: "Outstanding", icon: AlertCircle, show: "main" },
@@ -73,6 +78,7 @@ export function Sidebar({
   const router = useRouter();
   const supabase = createClient();
   const [open, setOpen] = useState(false);
+  const { count: unreadCount } = useUnreadMessages();
 
   // Close drawer on route change (mobile)
   useEffect(() => {
@@ -166,6 +172,7 @@ export function Sidebar({
             >
               <item.icon className="w-5 h-5 shrink-0" />
               <span className="truncate flex-1">{item.label}</span>
+              {item.badge === "messages" && <MessagesUnreadBadge />}
             </Link>
           );
         })}
@@ -197,7 +204,14 @@ export function Sidebar({
           className="p-2 rounded-lg hover:bg-white/10 active:bg-white/20"
           aria-label="Open menu"
         >
-          <Menu className="w-6 h-6" />
+          <span className="relative block">
+            <Menu className="w-6 h-6" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-1.5 -right-2 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </span>
+            )}
+          </span>
         </button>
         <Image
           src="/logo.png"

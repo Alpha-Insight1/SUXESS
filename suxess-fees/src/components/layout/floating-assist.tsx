@@ -4,6 +4,7 @@ import { Component, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { MessageCircle, Sparkles } from "lucide-react";
+import { useUnreadMessages } from "@/components/messages/unread-provider";
 
 class SoftBoundary extends Component<
   { children: ReactNode },
@@ -26,6 +27,7 @@ class SoftBoundary extends Component<
  */
 function FloatingAssistInner({ isAdmin }: { isAdmin: boolean }) {
   const pathname = usePathname();
+  const { count: unread } = useUnreadMessages();
 
   // Hide on the dedicated pages themselves
   if (pathname === "/ai" || pathname === "/messages") return null;
@@ -39,6 +41,11 @@ function FloatingAssistInner({ isAdmin }: { isAdmin: boolean }) {
       >
         <MessageCircle className="w-5 h-5 shrink-0" strokeWidth={2.25} />
         <span className="text-[15px] font-semibold tracking-tight">Messages</span>
+        {unread > 0 && (
+          <span className="ml-0.5 inline-flex items-center justify-center min-w-[1.4rem] h-[1.4rem] px-1.5 rounded-full bg-red-500 text-white text-xs font-bold animate-pulse">
+            {unread > 99 ? "99+" : unread}
+          </span>
+        )}
       </Link>
 
       {/* Ask Alpha — director / admin only */}

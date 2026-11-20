@@ -15,11 +15,14 @@ import {
   ArrowLeft,
 } from "lucide-react";
 
+import { presenceOf } from "@/lib/presence";
+
 export type ChatContact = {
   id: string;
   full_name: string | null;
   role: string;
   campus_label: string;
+  last_seen_at?: string | null;
 };
 
 export type ChatConversation = {
@@ -484,8 +487,14 @@ export function ChatPanel({
                     onClick={() => startChatWith(c)}
                     className="w-full flex items-center gap-2.5 px-2 py-2 rounded-xl hover:bg-gray-50 text-left transition"
                   >
-                    <span className="w-9 h-9 rounded-full bg-brand-green/15 text-brand-green flex items-center justify-center text-xs font-bold shrink-0">
+                    <span className="relative w-9 h-9 rounded-full bg-brand-green/15 text-brand-green flex items-center justify-center text-xs font-bold shrink-0">
                       {initials(c.full_name)}
+                      {c.last_seen_at && presenceOf(c.last_seen_at) === "online" && (
+                        <span
+                          title="Online now"
+                          className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-green-500 border-2 border-white"
+                        />
+                      )}
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block text-sm font-medium text-gray-900 truncate">
